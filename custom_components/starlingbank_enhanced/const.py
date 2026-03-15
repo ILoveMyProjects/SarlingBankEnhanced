@@ -44,21 +44,22 @@ FEATURE_TRANSFERS = "savings_goal_transfers"
 FEATURE_LABELS = {
     FEATURE_MAIN: "Main balance [account:read, balance:read]",
     FEATURE_SPACES: "Spaces [account:read, savings-goal:read, space:read]",
-    FEATURE_SCHEDULED: "Scheduled payments [account:read, scheduled-payment:read]",
+    FEATURE_SCHEDULED: "Scheduled payments [account:read, scheduled-payment:read, transaction:read]",
     FEATURE_TRANSFERS: (
         "Savings goal transfers "
-        "[account:read, savings-goal-transfer:read, savings-goal:read, space:read]"
+        "[account:read, savings-goal-transfer:read, savings-goal:read, space:read, transaction:read]"
     ),
 }
 
 FEATURE_PERMISSIONS = {
     FEATURE_MAIN: ["account:read", "balance:read"],
     FEATURE_SPACES: ["account:read", "savings-goal:read", "space:read"],
-    FEATURE_SCHEDULED: ["account:read", "scheduled-payment:read"],
+    FEATURE_SCHEDULED: ["account:read", "scheduled-payment:read, transaction:read"],
     FEATURE_TRANSFERS: [
         "account:read",
         "savings-goal-transfer:read",
         "savings-goal:read",
         "space:read",
+        "transaction:read",
     ],
 }

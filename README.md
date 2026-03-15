@@ -34,6 +34,29 @@ This integration adds:
 - Separate domain: `starlingbank_enhanced`
 - Ability to run **alongside** the built-in `starlingbank` integration
 
+## Screenshots
+
+### Cards
+![Entities](docs/accounts.png)
+
+### Cards
+![Entities](docs/cards.png)
+
+### Entities
+
+#### Main account
+![Entities](docs/main-account.png)
+
+#### Space (bils)
+![Entities](docs/space-bills.png)
+
+### Config
+
+#### Entity
+![Config](docs/config-entity.png)
+
+#### Space
+![Config](docs/config-space.png)
 
 ## Why this exists
 
@@ -192,6 +215,7 @@ Minimum scopes depend on the enabled features.
 
 - `account:read`
 - `scheduled-payment:read`
+- `transaction:read`
 
 ### Savings-goal transfers
 
@@ -199,6 +223,7 @@ Minimum scopes depend on the enabled features.
 - `savings-goal-transfer:read`
 - `savings-goal:read`
 - `space:read`
+- `transaction:read`
 
 > The integration is read-only. It does not move money or create payments.
 
