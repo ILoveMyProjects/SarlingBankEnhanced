@@ -5,10 +5,10 @@
     "@ILoveMyProjects"
   ],
   "config_flow": true,
-  "documentation": "https://github.com/ILoveMyProjects/SarlingBankEnhanced#readme",
+  "documentation": "https://github.com/ILoveMyProjects/StarlingBankEnhanced#readme",
   "integration_type": "service",
   "iot_class": "cloud_polling",
-  "issue_tracker": "https://github.com/ILoveMyProjects/SarlingBankEnhanced/issues",
+  "issue_tracker": "https://github.com/ILoveMyProjects/StarlingBankEnhanced/issues",
   "loggers": [
     "custom_components.starlingbank_enhanced"
   ],

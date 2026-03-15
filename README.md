@@ -1,18 +1,32 @@
 [![HACS](https://img.shields.io/badge/HACS-Custom-41BDF5.svg?style=flat-square)](https://hacs.xyz/)
-[![Validate](https://img.shields.io/github/actions/workflow/status/ILoveMyProjects/SarlingBankEnhanced/validate.yml?branch=main&style=flat-square&label=Validate)](https://github.com/ILoveMyProjects/SarlingBankEnhanced/actions/workflows/validate.yml)
-[![Hassfest](https://img.shields.io/github/actions/workflow/status/ILoveMyProjects/SarlingBankEnhanced/hassfest.yml?branch=main&style=flat-square&label=Hassfest)](https://github.com/ILoveMyProjects/SarlingBankEnhanced/actions/workflows/hassfest.yml)
-[![Release](https://img.shields.io/github/v/release/ILoveMyProjects/SarlingBankEnhanced?style=flat-square)](https://github.com/ILoveMyProjects/SarlingBankEnhanced/releases)
+[![Validate](https://img.shields.io/github/actions/workflow/status/ILoveMyProjects/StarlingBankEnhanced/validate.yml?branch=main&style=flat-square&label=Validate)](https://github.com/ILoveMyProjects/StarlingBankEnhanced/actions/workflows/validate.yml)
+[![Hassfest](https://img.shields.io/github/actions/workflow/status/ILoveMyProjects/StarlingBankEnhanced/hassfest.yml?branch=main&style=flat-square&label=Hassfest)](https://github.com/ILoveMyProjects/StarlingBankEnhanced/actions/workflows/hassfest.yml)
+[![Release](https://img.shields.io/github/v/release/ILoveMyProjects/StarlingBankEnhanced?style=flat-square)](https://github.com/ILoveMyProjects/StarlingBankEnhanced/releases)
 [![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2026.3.0%2B-blue?style=flat-square)](https://www.home-assistant.io/)
-![License](https://img.shields.io/github/license/ILoveMyProjects/SarlingBankEnhanced?style=flat-square)
+![License](https://img.shields.io/github/license/ILoveMyProjects/StarlingBankEnhanced?style=flat-square)
+
+
+<p align="center">
+  <a href="https://developer.starlingbank.com/docs">
+    <img src="docs/starling-logo-small.svg" alt="Starling Bank logo" width="140">
+  </a>
+</p>
+
+<p align="center">
+  <a href="https://developer.starlingbank.com/docs">
+    <img src="docs/starling-logo.svg" alt="Starling Bank logo" width="140">
+  </a>
+</p>
 
 # Starling Bank Enhanced for Home Assistant
 
 A custom Home Assistant integration for Starling Bank with UI-based setup, richer read-only account entities, Spaces support, scheduled payment visibility, recurring savings-goal transfer visibility, and integration diagnostics helpers.
 
+This project is an independent third-party Home Assistant custom integration.
 ## Disclaimer
 
 This project is **not affiliated with Starling Bank**.
-Starling Bank is a registered trademark of Starling Bank Ltd.
+Starling Bank and the Starling logo are trademarks of Starling Bank Ltd.
 
 ## What is included
 
@@ -414,6 +428,7 @@ If this integration is useful to you, please consider giving the repository a Gi
 You can also support development here:
 
 [![GitHub Sponsors](https://img.shields.io/badge/GitHub%20Sponsors-support-pink?style=for-the-badge&logo=githubsponsors)](https://github.com/sponsors/ILoveMyProjects)
+
 [![Buy Me A Coffee](https://img.shields.io/badge/Buy%20me%20a%20coffee-support-yellow?style=for-the-badge&logo=buymeacoffee)](https://buymeacoffee.com/ILoveMyProjects)
 
 Support is completely optional and helps with maintenance and new features.
