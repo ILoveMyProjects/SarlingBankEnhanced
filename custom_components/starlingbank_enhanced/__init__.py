@@ -4,12 +4,15 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+import homeassistant.helpers.config_validation as cv
+
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.exceptions import ConfigEntryAuthFailed
+from homeassistant.helpers.typing import ConfigType
 
 from .api import StarlingApiClient, StarlingApiError
 from .const import (
@@ -21,7 +24,6 @@ from .const import (
     CONF_INCLUDE_KITE_SPACES,
     CONF_INCLUDE_SAVINGS_SPACES,
     CONF_INCLUDE_SPENDING_SPACES,
-    CONF_SHOW_SAVINGS_ACCOUNT_SPACES,
     CONF_SANDBOX,
     CONF_SPACE_NAMES,
     COORDINATOR,
@@ -35,6 +37,7 @@ from .coordinator import StarlingDataUpdateCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 PLATFORMS = [Platform.SENSOR, Platform.BINARY_SENSOR]
+CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
 
 def _slug_value(value: str) -> str:
@@ -50,6 +53,7 @@ def _extract_runtime_space_names(runtime_data: dict[str, Any] | None) -> set[str
         return set()
 
     return {name for name in spaces.keys() if isinstance(name, str) and name.strip()}
+
 
 def _is_auth_failure(err: Exception) -> bool:
     if isinstance(err, StarlingApiError) and err.status in (401, 403):
@@ -158,7 +162,7 @@ async def _async_cleanup_stale_entities(
         registry.async_remove(entity_entry.entity_id)
 
 
-async def async_setup(hass: HomeAssistant, config: dict) -> bool:
+async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     return True
 
 
