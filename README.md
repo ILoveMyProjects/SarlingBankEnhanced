@@ -3,7 +3,7 @@
 [![Hassfest](https://img.shields.io/github/actions/workflow/status/ILoveMyProjects/SarlingBankEnhanced/hassfest.yml?branch=main&style=flat-square&label=Hassfest)](https://github.com/ILoveMyProjects/SarlingBankEnhanced/actions/workflows/hassfest.yml)
 [![Release](https://img.shields.io/github/v/release/ILoveMyProjects/SarlingBankEnhanced?style=flat-square)](https://github.com/ILoveMyProjects/SarlingBankEnhanced/releases)
 [![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2026.3.0%2B-blue?style=flat-square)](https://www.home-assistant.io/)
-[![License](https://img.shields.io/github/license/ILoveMyProjects/SarlingBankEnhanced?style=flat-square)]
+![License](https://img.shields.io/github/license/ILoveMyProjects/SarlingBankEnhanced?style=flat-square)
 
 # Starling Bank Enhanced for Home Assistant
 
