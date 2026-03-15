@@ -402,3 +402,18 @@ This reduces API load and makes rate-limit handling more predictable.
 ## License
 
 This repository uses the **MIT License**.
+
+## Contributing
+
+Contributions are welcome. Feel free to open issues or pull requests.
+
+## Support the project
+
+If this integration is useful to you, please consider giving the repository a GitHub star ⭐
+
+You can also support development here:
+
+[![GitHub Sponsors](https://img.shields.io/badge/GitHub%20Sponsors-support-pink?style=for-the-badge&logo=githubsponsors)](https://github.com/sponsors/ILoveMyProjects)
+[![Buy Me A Coffee](https://img.shields.io/badge/Buy%20me%20a%20coffee-support-yellow?style=for-the-badge&logo=buymeacoffee)](https://buymeacoffee.com/ILoveMyProjects)
+
+Support is completely optional and helps with maintenance and new features.
