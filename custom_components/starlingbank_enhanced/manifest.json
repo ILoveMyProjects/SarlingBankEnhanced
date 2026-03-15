@@ -1,17 +1,17 @@
 {
   "domain": "starlingbank_enhanced",
   "name": "Starling Bank Enhanced",
-  "version": "1.0.0",
+  "codeowners": [
+    "@ILoveMyProjects"
+  ],
   "config_flow": true,
-  "iot_class": "cloud_polling",
-  "integration_type": "service",
   "documentation": "https://github.com/ILoveMyProjects/SarlingBankEnhanced#readme",
+  "integration_type": "service",
+  "iot_class": "cloud_polling",
   "issue_tracker": "https://github.com/ILoveMyProjects/SarlingBankEnhanced/issues",
   "loggers": [
     "custom_components.starlingbank_enhanced"
   ],
   "requirements": [],
-  "codeowners": [
-    "@ILoveMyProjects"
-  ]
+  "version": "1.0.0"
 }
