@@ -315,31 +315,40 @@ This reduces API load and makes rate-limit handling more predictable.
 
 ```text
 .
-├── README.md
-├── LICENSE
-├── hacs.json
-├── info.md
 ├── .github/
 │   └── workflows/
+│       ├── hassfest.yml
 │       └── validate.yml
-├── brands/
+├── .gitignore
+├── LICENSE
+├── README.md
+├── hacs.json
+├── custom_components/
 │   └── starlingbank_enhanced/
-│       ├── icon.png
-│       ├── icon.svg
-│       └── logo.png
-└── custom_components/
-    └── starlingbank_enhanced/
-        ├── __init__.py
-        ├── api.py
-        ├── binary_sensor.py
-        ├── config_flow.py
-        ├── const.py
-        ├── coordinator.py
-        ├── manifest.json
-        ├── sensor.py
-        └── translations/
-            ├── en.json
-            └── pl.json
+│       ├── __init__.py
+│       ├── api.py
+│       ├── binary_sensor.py
+│       ├── config_flow.py
+│       ├── const.py
+│       ├── coordinator.py
+│       ├── diagnostics.py
+│       ├── manifest.json
+│       ├── sensor.py
+|       ├── brand/
+│       │   ├── icon.png
+│       │   ├── icon.svg
+│       │   └── logo.png
+│       └──  translations/
+│           ├── en.json
+│           └── pl.json
+|
+└── tests/
+    └── components/
+        └── starlingbank_enhanced/
+            ├── __init__.py
+            ├── conftest.py
+            ├── test_config_flow.py
+            └── test_init.py
 ```
 ## Troubleshooting
 
