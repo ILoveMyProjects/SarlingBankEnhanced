@@ -1,0 +1,81 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Wybierz funkcje Starling",
+        "description": "Wybierz, które elementy Twojego konta Starling chcesz używać. Wymagane uprawnienia tokena są pokazane przy każdej opcji.",
+        "data": {
+          "features": "Funkcje"
+        }
+      },
+      "token": {
+        "title": "Połącz Starling Bank Enhanced",
+        "description": "Utwórz Personal Access Token z wymaganymi uprawnieniami dla wybranych funkcji: {permissions}. Następnie wklej token poniżej.\n\nSzczegóły walidacji: {validation_details}",
+        "data": {
+          "access_token": "Token dostępu",
+          "sandbox": "Użyj sandboxa Starling"
+        }
+      },
+      "select_entities": {
+        "title": "Wybierz encje Starling",
+        "description": "Wybierz, które salda i Spaces mają zostać utworzone, które kategorie Spaces włączyć oraz ile historii przechowywać.",
+        "data": {
+          "include_cleared_balance": "Utwórz sensor salda zaksięgowanego",
+          "include_effective_balance": "Utwórz sensor salda dostępnego",
+          "space_names": "Spaces",
+          "upcoming_limit": "Ile nadchodzących zaplanowanych płatności przechowywać",
+          "history_limit": "Ile ostatnich transferów przechowywać",
+          "include_savings_spaces": "Uwzględnij Savings Spaces",
+          "include_spending_spaces": "Uwzględnij Spending Spaces",
+          "include_kite_spaces": "Uwzględnij Kite Spaces",
+          "show_savings_account_spaces": "Utwórz osobne sensory Space dla tego konta oszczędnościowego"
+        }
+      },
+      "reconfigure": {
+        "title": "Połącz ponownie Starling Bank Enhanced",
+        "description": "Zaktualizuj token dla tego konta. Wymagane uprawnienia dla aktywnych funkcji: {permissions}\n\nSzczegóły walidacji: {validation_details}",
+        "data": {
+          "access_token": "Token dostępu",
+          "sandbox": "Użyj sandboxa Starling"
+        }
+      },
+      "account": {
+        "title": "Wybierz konto",
+        "description": "Wybierz konto Starling używane przez ten wpis integracji. Szczegóły walidacji: {validation_details}",
+        "data": {
+          "account_uid": "Konto"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Nie udało się połączyć z API Starling",
+      "no_features_selected": "Wybierz co najmniej jedną funkcję",
+      "no_entities_selected": "Wybierz co najmniej jedno saldo lub Space",
+      "permissions_not_ok": "Walidacja tokena nie przeszła dla jednej lub większej liczby wybranych funkcji. Zobacz szczegóły walidacji powyżej.",
+      "unknown": "Nieoczekiwany błąd"
+    },
+    "abort": {
+      "wrong_account": "Podany token należy do innego konta Starling.",
+      "reconfigure_successful": "Połączenie ze Starling zostało pomyślnie zaktualizowane."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Zaktualizuj encje Starling",
+        "description": "Wybierz, które salda i Spaces mają pozostać włączone, które kategorie Spaces uwzględnić oraz ile historii przechowywać.",
+        "data": {
+          "include_cleared_balance": "Utwórz sensor salda zaksięgowanego",
+          "include_effective_balance": "Utwórz sensor salda dostępnego",
+          "space_names": "Spaces",
+          "upcoming_limit": "Ile nadchodzących zaplanowanych płatności przechowywać",
+          "history_limit": "Ile ostatnich transferów przechowywać",
+          "include_savings_spaces": "Uwzględnij Savings Spaces",
+          "include_spending_spaces": "Uwzględnij Spending Spaces",
+          "include_kite_spaces": "Uwzględnij Kite Spaces",
+          "show_savings_account_spaces": "Utwórz osobne sensory Space dla tego konta oszczędnościowego"
+        }
+      }
+    }
+  }
+}
