@@ -45,6 +45,14 @@
         "data": {
           "account_uid": "Konto"
         }
+      },
+      "reauth_confirm": {
+        "title": "Połącz ponownie Starling Bank Enhanced",
+        "description": "Token Starling nie jest już ważny. Utwórz nowy Personal Access Token z wymaganymi uprawnieniami: {permissions}.\\n\\nSzczegóły walidacji: {validation_details}",
+        "data": {
+          "access_token": "Token dostępu",
+          "sandbox": "Użyj sandboxa Starling"
+        }
       }
     },
     "error": {
@@ -56,7 +64,8 @@
     },
     "abort": {
       "wrong_account": "Podany token należy do innego konta Starling.",
-      "reconfigure_successful": "Połączenie ze Starling zostało pomyślnie zaktualizowane."
+      "reconfigure_successful": "Połączenie ze Starling zostało pomyślnie zaktualizowane.",
+      "reauth_successful": "Połączenie ze Starling zostało pomyślnie przywrócone."
     }
   },
   "options": {

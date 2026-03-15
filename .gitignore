@@ -1,13 +1,49 @@
+# Python
 __pycache__/
 *.py[cod]
+*$py.class
 *.so
-.pytest_cache/
-.mypy_cache/
-.ruff_cache/
-.coverage
-htmlcov/
+
+# Packaging
 build/
 dist/
-.DS_Store
+*.egg-info/
+.eggs/
+*.egg
+pip-wheel-metadata/
+
+# Virtualenv
+.venv/
+venv/
+env/
+ENV/
+
+# Testing
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+nosetests.xml
+
+# Type check / lint
+.mypy_cache/
+.ruff_cache/
+
+# IDE
 .idea/
 .vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Home Assistant dev
+config/
+home-assistant.log
+home-assistant_v2.db
+storage/
+
+# Misc
+.python-version
+*.log

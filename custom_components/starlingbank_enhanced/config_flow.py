@@ -133,6 +133,7 @@ class StarlingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self._validation_details = ""
         self._accounts: list[dict[str, Any]] = []
         self._account_uid: str | None = None
+        self._reauth_entry: config_entries.ConfigEntry | None = None
 
     def _set_spaces_from_goals(self, goals: list[dict[str, Any]]) -> None:
         catalog: dict[str, dict[str, Any]] = {}
@@ -147,6 +148,117 @@ class StarlingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 "supports_transfers": category == "savings" and bool(goal.get("savingsGoalUid")),
             }
         self._space_catalog = dict(sorted(catalog.items(), key=lambda item: item[0].lower()))
+
+    async def async_step_reauth(self, entry_data: dict[str, Any]):
+        """Start reauthentication flow for an existing entry."""
+        entry_id = self.context.get("entry_id")
+        if not entry_id:
+            return self.async_abort(reason="unknown")
+
+        entry = self.hass.config_entries.async_get_entry(entry_id)
+        if entry is None:
+            return self.async_abort(reason="unknown")
+
+        self._reauth_entry = entry
+
+        permissions: set[str] = set()
+        for feature in entry.data.get(CONF_FEATURES, [FEATURE_MAIN, FEATURE_SPACES]):
+            permissions.update(FEATURE_PERMISSIONS.get(feature, []))
+        self._required_permissions = sorted(permissions)
+
+        return await self.async_step_reauth_confirm()
+
+    async def async_step_reauth_confirm(self, user_input: dict[str, Any] | None = None):
+        """Confirm reauthentication with a replacement token."""
+        entry = self._reauth_entry
+        if entry is None:
+            return self.async_abort(reason="unknown")
+
+        errors: dict[str, str] = {}
+
+        if user_input is not None:
+            token = user_input[CONF_ACCESS_TOKEN].strip()
+            sandbox = user_input.get(CONF_SANDBOX, entry.data.get(CONF_SANDBOX, False))
+
+            new_data, errors = await self._async_validate_token_for_existing_entry(
+                entry,
+                token,
+                sandbox,
+            )
+
+            if new_data and not errors:
+                self.hass.config_entries.async_update_entry(entry, data=new_data)
+                await self.hass.config_entries.async_reload(entry.entry_id)
+                return self.async_abort(reason="reauth_successful")
+
+        return self.async_show_form(
+            step_id="reauth_confirm",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(CONF_ACCESS_TOKEN): str,
+                    vol.Optional(
+                        CONF_SANDBOX,
+                        default=entry.data.get(CONF_SANDBOX, False),
+                    ): BooleanSelector(),
+                }
+            ),
+            errors=errors,
+            description_placeholders={
+                "permissions": ", ".join(self._required_permissions),
+                "validation_details": self._validation_details or "Enter a new token to restore access.",
+            },
+        )
+
+    async def _async_validate_token_for_existing_entry(
+        self,
+        entry: config_entries.ConfigEntry,
+        token: str,
+        sandbox: bool,
+    ) -> tuple[dict[str, Any] | None, dict[str, str]]:
+        """Validate a token against an existing config entry."""
+        errors: dict[str, str] = {}
+        session = async_get_clientsession(self.hass)
+        api = StarlingApiClient(session, token, sandbox)
+
+        self._features = list(entry.data.get(CONF_FEATURES, [FEATURE_MAIN, FEATURE_SPACES]))
+
+        try:
+            account = (
+                await api.async_get_account(entry.data.get(CONF_ACCOUNT_UID))
+                if entry.data.get(CONF_ACCOUNT_UID)
+                else await api.async_get_primary_account()
+            )
+            account_uid = account.get("accountUid")
+            if not account_uid:
+                self._validation_details = "No accountUid returned by Starling API."
+                errors["base"] = "cannot_connect"
+                return None, errors
+
+            missing_permissions, notes = await self._validate_selected_features(api, account_uid)
+            if missing_permissions:
+                self._validation_details = "Missing permissions: " + ", ".join(missing_permissions)
+                errors["base"] = "permissions_not_ok"
+                return None, errors
+
+            if entry.data.get(CONF_ACCOUNT_UID) and account_uid != entry.data.get(CONF_ACCOUNT_UID):
+                errors["base"] = "wrong_account"
+                return None, errors
+
+            self._validation_details = " | ".join(notes) if notes else ""
+            return {
+                **entry.data,
+                CONF_ACCESS_TOKEN: token,
+                CONF_SANDBOX: sandbox,
+            }, errors
+
+        except StarlingApiError as err:
+            self._validation_details = str(err)
+            errors["base"] = "cannot_connect"
+            return None, errors
+        except Exception as err:
+            self._validation_details = str(err)
+            errors["base"] = "unknown"
+            return None, errors
 
     def _filtered_space_names(
         self,
@@ -454,38 +566,34 @@ class StarlingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             token = user_input[CONF_ACCESS_TOKEN].strip()
             sandbox = user_input.get(CONF_SANDBOX, False)
-            session = async_get_clientsession(self.hass)
-            api = StarlingApiClient(session, token, sandbox)
-            try:
-                account = await api.async_get_account(entry.data.get(CONF_ACCOUNT_UID)) if entry.data.get(CONF_ACCOUNT_UID) else await api.async_get_primary_account()
-                account_uid = account.get("accountUid")
-                if not account_uid:
-                    self._validation_details = "No accountUid returned by Starling API."
-                    errors["base"] = "cannot_connect"
-                else:
-                    self._features = list(entry.data.get(CONF_FEATURES, [FEATURE_MAIN, FEATURE_SPACES]))
-                    missing_permissions, notes = await self._validate_selected_features(api, account_uid)
-                    if missing_permissions:
-                        self._validation_details = "Missing permissions: " + ", ".join(missing_permissions)
-                        errors["base"] = "permissions_not_ok"
-                    elif entry.data.get(CONF_ACCOUNT_UID) and account_uid != entry.data.get(CONF_ACCOUNT_UID):
-                        return self.async_abort(reason="wrong_account")
-                    else:
-                        self.hass.config_entries.async_update_entry(
-                            entry,
-                            data={
-                                **entry.data,
-                                CONF_ACCESS_TOKEN: token,
-                                CONF_SANDBOX: sandbox,
-                            },
-                        )
-                        return self.async_abort(reason="reconfigure_successful")
-            except StarlingApiError as err:
-                self._validation_details = str(err)
-                errors["base"] = "cannot_connect"
-            except Exception as err:
-                self._validation_details = str(err)
-                errors["base"] = "unknown"
+
+            new_data, errors = await self._async_validate_token_for_existing_entry(
+                entry,
+                token,
+                sandbox,
+            )
+
+            if new_data and not errors:
+                self.hass.config_entries.async_update_entry(entry, data=new_data)
+                return self.async_abort(reason="reconfigure_successful")
+
+            return self.async_show_form(
+                step_id="reconfigure",
+                data_schema=vol.Schema(
+                    {
+                        vol.Required(CONF_ACCESS_TOKEN): str,
+                        vol.Optional(
+                            CONF_SANDBOX,
+                            default=entry.data.get(CONF_SANDBOX, False),
+                        ): BooleanSelector(),
+                    }
+                ),
+                errors=errors,
+                description_placeholders={
+                    "permissions": ", ".join(sorted(permissions)),
+                    "validation_details": self._validation_details or "Enter a replacement token.",
+                },
+            )
 
         return self.async_show_form(
             step_id="reconfigure",

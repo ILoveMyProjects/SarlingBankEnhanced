@@ -9,8 +9,9 @@ from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.exceptions import ConfigEntryAuthFailed
 
-from .api import StarlingApiClient
+from .api import StarlingApiClient, StarlingApiError
 from .const import (
     CONF_ACCESS_TOKEN,
     CONF_ACCOUNT_UID,
@@ -50,6 +51,12 @@ def _extract_runtime_space_names(runtime_data: dict[str, Any] | None) -> set[str
 
     return {name for name in spaces.keys() if isinstance(name, str) and name.strip()}
 
+def _is_auth_failure(err: Exception) -> bool:
+    if isinstance(err, StarlingApiError) and err.status in (401, 403):
+        return True
+
+    text = str(err).lower()
+    return any(part in text for part in ("401", "403", "forbidden", "unauthorized"))
 
 def _extract_runtime_transfer_space_names(runtime_data: dict[str, Any] | None) -> set[str]:
     if not runtime_data:
@@ -188,7 +195,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             entry.data.get(CONF_INCLUDE_KITE_SPACES, True),
         ),
     )
-    await coordinator.async_config_entry_first_refresh()
+    
+    try:
+        await coordinator.async_config_entry_first_refresh()
+    except Exception as err:
+        if _is_auth_failure(err):
+            raise ConfigEntryAuthFailed("Starling credentials expired or were revoked") from err
+        raise
     await _async_cleanup_stale_entities(hass, entry, coordinator.data)
 
     @callback

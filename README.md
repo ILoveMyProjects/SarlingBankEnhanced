@@ -1,8 +1,24 @@
+[![HACS](https://img.shields.io/badge/HACS-Custom-41BDF5.svg?style=flat-square)](https://hacs.xyz/)
+[![Validate](https://img.shields.io/github/actions/workflow/status/ILoveMyProjects/SarlingBankEnhanced/validate.yml?branch=main&style=flat-square&label=Validate)](https://github.com/ILoveMyProjects/SarlingBankEnhanced/actions/workflows/validate.yml)
+[![Hassfest](https://img.shields.io/github/actions/workflow/status/ILoveMyProjects/SarlingBankEnhanced/hassfest.yml?branch=main&style=flat-square&label=Hassfest)](https://github.com/ILoveMyProjects/SarlingBankEnhanced/actions/workflows/hassfest.yml)
+[![Release](https://img.shields.io/github/v/release/ILoveMyProjects/SarlingBankEnhanced?style=flat-square)](https://github.com/ILoveMyProjects/SarlingBankEnhanced/releases)
+[![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2026.3.0%2B-blue?style=flat-square)](https://www.home-assistant.io/)
+[![License](https://img.shields.io/github/license/ILoveMyProjects/SarlingBankEnhanced?style=flat-square)](./LICENSE)
+
 # Starling Bank Enhanced for Home Assistant
 
-Custom Home Assistant integration for **Starling Bank** with a full UI setup flow, richer read-only entities, and support for features that are missing from the legacy built-in integration.
+A custom Home Assistant integration for Starling Bank with UI-based setup, richer read-only account entities, Spaces support, scheduled payment visibility, recurring savings-goal transfer visibility, and integration diagnostics helpers.
+
+## Disclaimer
+
+This project is **not affiliated with Starling Bank**.
+Starling Bank is a registered trademark of Starling Bank Ltd.
 
 ## What is included
+
+Work with account types:
+- Personal
+- Joint
 
 This integration adds:
 
@@ -18,8 +34,6 @@ This integration adds:
 - Separate domain: `starlingbank_enhanced`
 - Ability to run **alongside** the built-in `starlingbank` integration
 
-> [!IMPORTANT]
-> This is a community-made integration. It is **not affiliated with Starling Bank**.
 
 ## Why this exists
 
@@ -101,32 +115,6 @@ These help with debugging, API throttling visibility, and checking when data was
 - Entity selection is feature-aware
 - Options flow lets you change enabled balances, Spaces, and retention limits later
 
-## Installation
-
-### HACS
-
-1. Open **HACS**.
-2. Open the menu in the top-right corner.
-3. Choose **Custom repositories**.
-4. Add your repository URL.
-5. Choose category **Integration**.
-6. Install **Starling Bank Enhanced**.
-7. Restart Home Assistant.
-8. Go to **Settings → Devices & Services → Add Integration**.
-9. Search for **Starling Bank Enhanced**.
-
-### Manual
-
-1. Copy `custom_components/starlingbank_enhanced` to:
-
-```text
-/config/custom_components/starlingbank_enhanced
-```
-
-2. Restart Home Assistant.
-3. Go to **Settings → Devices & Services → Add Integration**.
-4. Search for **Starling Bank Enhanced**.
-
 ## Configuration flow
 
 This integration is configured fully from the Home Assistant UI.
@@ -163,6 +151,28 @@ Depending on enabled features, you can choose:
 - upcoming scheduled payment retention limit
 - recent transfer history retention limit
 
+## Getting a Starling personal access token
+
+To use this integration with your real Starling account, you need a **personal access token** from the official Starling Developer Portal.
+
+Official documentation:
+- [Starling Developers documentation](https://developer.starlingbank.com/docs)
+
+### Production token for your real account
+
+1. Open the Starling Developer Portal:
+   [https://developer.starlingbank.com/docs](https://developer.starlingbank.com/docs)
+2. Sign in with your Starling account.
+3. Link your Starling account in the Developer Portal if prompted (personal or joint).
+4. Create a **personal access token**.
+5. Select the scopes required for the features you want to enable in Home Assistant.
+6. Copy the token and keep it safe.
+7. In Home Assistant, paste the token during the integration setup flow.
+
+### Sandbox token for testing
+
+If you want to test the integration with dummy data instead of your real bank account, use the Starling sandbox and enable **sandbox mode** during setup.
+
 ## Token permissions
 
 Minimum scopes depend on the enabled features.
@@ -190,7 +200,43 @@ Minimum scopes depend on the enabled features.
 - `savings-goal:read`
 - `space:read`
 
-Use a token that contains the scopes for every feature you enable.
+> The integration is read-only. It does not move money or create payments.
+
+## Token renewal and reauthentication
+
+If your Starling token expires or is revoked, the integration may require reauthentication.
+
+To restore access:
+1. Create a new personal access token in the Starling Developer Portal.
+2. Open the integration in Home Assistant.
+3. Use **Reconfigure** and paste the new token.
+
+Make sure the replacement token includes the same scopes required by your enabled features.
+
+## Installation
+
+### HACS
+
+1. Open HACS.
+2. Go to the top-right menu and select **Custom repositories**.
+3. Add the repository URL.
+4. Select **Integration** as the category.
+5. Install **Starling Bank Enhanced**.
+6. Restart Home Assistant.
+7. Go to **Settings → Devices & Services → Add Integration**.
+8. Search for **Starling Bank Enhanced**.
+
+### Manual
+
+1. Copy `custom_components/starlingbank_enhanced` into:
+
+```text
+/config/custom_components/starlingbank_enhanced
+```
+
+2. Restart Home Assistant.
+3. Go to **Settings → Devices & Services → Add Integration**.
+4. Search for **Starling Bank Enhanced**.
 
 ## Example entities
 
@@ -256,6 +302,8 @@ This reduces API load and makes rate-limit handling more predictable.
 - No money movement, transfers, or write actions
 - Scheduled payments and transfer history are for visibility only
 - Savings-goal transfer history depends on Starling API data returned for settled feed items
+- Some Spaces or transfer-related features may not be available for all account types.
+- Data refresh is staggered to reduce API load and rate-limit pressure.
 
 ## Tested with
 
@@ -293,6 +341,29 @@ This reduces API load and makes rate-limit handling more predictable.
             ├── en.json
             └── pl.json
 ```
+## Troubleshooting
+
+### The integration does not appear in Add Integration
+- Restart Home Assistant after installation.
+- If installed through HACS, make sure the repository type was set to **Integration**.
+
+### Token validation fails
+- Make sure you created a **personal access token** in the Starling Developer Portal.
+- Make sure the token includes all scopes required by the enabled features.
+- If you are testing with dummy data, enable **sandbox mode**.
+
+### The integration stops updating
+- Your token may have expired or been revoked.
+- Create a new token and use **Reconfigure** in Home Assistant.
+
+### Spaces are missing
+- Check that Spaces-related scopes are granted.
+- Check whether Space category filters disabled the missing Spaces.
+
+### Scheduled payments or recurring transfer entities are empty
+- Check whether the required feature was enabled during setup.
+- Check whether the token includes the required scopes.
+- Some data may not exist for the selected account.
 
 ## License
 

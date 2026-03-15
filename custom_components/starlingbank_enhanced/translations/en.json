@@ -39,6 +39,14 @@
           "sandbox": "Use Starling sandbox"
         }
       },
+      "reauth_confirm": {
+        "title": "Reconnect Starling Bank Enhanced",
+        "description": "Your Starling token is no longer valid. Create a new Personal Access Token with the required permissions: {permissions}.\\n\\nValidation details: {validation_details}",
+        "data": {
+          "access_token": "Access token",
+          "sandbox": "Use Starling sandbox"
+        }
+      },
       "account": {
         "title": "Choose account",
         "description": "Choose which Starling account should be used for this entry. Validation details: {validation_details}",
@@ -56,7 +64,8 @@
     },
     "abort": {
       "wrong_account": "The provided token belongs to a different Starling account.",
-      "reconfigure_successful": "The Starling connection was updated successfully."
+      "reconfigure_successful": "The Starling connection was updated successfully.",
+      "reauth_successful": "The Starling connection was restored successfully."
     }
   },
   "options": {

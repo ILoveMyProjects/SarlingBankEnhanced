@@ -7,6 +7,7 @@ from typing import Any
 
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
+from homeassistant.exceptions import ConfigEntryAuthFailed
 
 from .api import StarlingApiClient, StarlingApiError
 from .const import (
@@ -25,6 +26,8 @@ from .const import (
 
 _LOGGER = logging.getLogger(__name__)
 
+def _is_auth_failure(err: StarlingApiError) -> bool:
+    return err.status in (401, 403)
 
 class StarlingDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     """Coordinate Starling API polling."""
@@ -526,6 +529,8 @@ class StarlingDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         try:
             await self._refresh_account_metadata(now)
         except StarlingApiError as err:
+            if _is_auth_failure(err):
+                raise ConfigEntryAuthFailed("Starling credentials expired or were revoked") from err
             if err.status == 429 and self._last_successful_data:
                 self._record_rate_limit(err)
                 return self._last_successful_data
@@ -541,6 +546,8 @@ class StarlingDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         try:
             balance = await self.api.async_get_balance(self.account_uid)
         except StarlingApiError as err:
+            if _is_auth_failure(err):
+                raise ConfigEntryAuthFailed("Starling credentials expired or were revoked") from err
             if err.status == 429 and self._last_successful_data:
                 self._record_rate_limit(err)
                 return self._last_successful_data
