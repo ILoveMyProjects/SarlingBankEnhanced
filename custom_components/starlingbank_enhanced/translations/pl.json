@@ -26,6 +26,7 @@
           "upcoming_limit": "Ile nadchodzących zaplanowanych płatności przechowywać",
           "history_limit": "Ile ostatnich transferów przechowywać",
           "include_savings_spaces": "Uwzględnij Savings Spaces",
+          "use_webhook": "Włącz odświeżanie wyzwalane webhookiem",
           "include_spending_spaces": "Uwzględnij Spending Spaces",
           "include_kite_spaces": "Uwzględnij Kite Spaces",
           "show_savings_account_spaces": "Utwórz osobne sensory Space dla tego konta oszczędnościowego"
@@ -79,6 +80,7 @@
           "space_names": "Spaces",
           "upcoming_limit": "Ile nadchodzących zaplanowanych płatności przechowywać",
           "history_limit": "Ile ostatnich transferów przechowywać",
+          "use_webhook": "Włącz odświeżanie wyzwalane webhookiem",
           "include_savings_spaces": "Uwzględnij Savings Spaces",
           "include_spending_spaces": "Uwzględnij Spending Spaces",
           "include_kite_spaces": "Uwzględnij Kite Spaces",

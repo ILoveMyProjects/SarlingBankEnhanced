@@ -200,6 +200,27 @@ class StarlingLastRateLimitAtSensor(StarlingDiagnosticsBaseSensor):
         }
 
 
+class StarlingLastWebhookReceivedSensor(CoordinatorEntity, SensorEntity):
+    _attr_has_entity_name = True
+    _attr_name = "Last webhook received"
+    _attr_icon = "mdi:webhook"
+
+    def __init__(self, coordinator, entry) -> None:
+        super().__init__(coordinator)
+        self._entry = entry
+        self._attr_unique_id = f"starling_enhanced_{entry.entry_id}_last_webhook_received"
+        self._attr_device_info = {
+            "identifiers": {(DOMAIN, entry.entry_id)},
+            "name": entry.title,
+            "manufacturer": "Starling Bank",
+        }
+
+    @property
+    def native_value(self):
+        runtime = self.hass.data.get(DOMAIN, {}).get(self._entry.entry_id, {})
+        return runtime.get(CONF_WEBHOOK_LAST_RECEIVED)
+
+
 class StarlingBackoffUntilSensor(StarlingDiagnosticsBaseSensor):
     _attr_device_class = SensorDeviceClass.TIMESTAMP
     _attr_icon = "mdi:timer-sand"

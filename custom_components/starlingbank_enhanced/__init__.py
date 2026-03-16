@@ -26,6 +26,10 @@ from .const import (
     CONF_INCLUDE_SPENDING_SPACES,
     CONF_SANDBOX,
     CONF_SPACE_NAMES,
+    CONF_USE_WEBHOOK,
+    CONF_WEBHOOK_ID,
+    CONF_WEBHOOK_URL,
+    DEFAULT_USE_WEBHOOK,
     COORDINATOR,
     DOMAIN,
     FEATURE_MAIN,
@@ -34,10 +38,25 @@ from .const import (
     FEATURE_TRANSFERS,
 )
 from .coordinator import StarlingDataUpdateCoordinator
+from .webhook import async_register_webhook
 
 _LOGGER = logging.getLogger(__name__)
 PLATFORMS = [Platform.SENSOR, Platform.BINARY_SENSOR]
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
+
+@callback
+def _clear_webhook_metadata_if_disabled(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Remove stored webhook metadata when webhook is disabled."""
+    if entry.options.get(CONF_USE_WEBHOOK, entry.data.get(CONF_USE_WEBHOOK, DEFAULT_USE_WEBHOOK)):
+        return
+
+    if CONF_WEBHOOK_ID not in entry.data and CONF_WEBHOOK_URL not in entry.data:
+        return
+
+    new_data = dict(entry.data)
+    new_data.pop(CONF_WEBHOOK_ID, None)
+    new_data.pop(CONF_WEBHOOK_URL, None)
+    hass.config_entries.async_update_entry(entry, data=new_data)
 
 
 def _slug_value(value: str) -> str:
@@ -172,7 +191,7 @@ async def _async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data.setdefault(DOMAIN, {})
-
+    _clear_webhook_metadata_if_disabled(hass, entry)
     session = async_get_clientsession(hass)
     api = StarlingApiClient(session=session, access_token=entry.data[CONF_ACCESS_TOKEN], sandbox=entry.data.get(CONF_SANDBOX, False))
 
@@ -214,10 +233,21 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     unsub_options_listener = entry.add_update_listener(_async_reload_entry)
     unsub_coordinator_listener = coordinator.async_add_listener(_handle_coordinator_update)
+        
+    unsub_webhook = None
+    webhook_id = None
+    webhook_url = None
+    if entry.options.get(CONF_USE_WEBHOOK, entry.data.get(CONF_USE_WEBHOOK, DEFAULT_USE_WEBHOOK)):
+        webhook_id, webhook_url, unsub_webhook = await async_register_webhook(hass, entry)
+
     hass.data[DOMAIN][entry.entry_id] = {
         COORDINATOR: coordinator,
         "unsub_options_listener": unsub_options_listener,
         "unsub_coordinator_listener": unsub_coordinator_listener,
+        "unsub_webhook": unsub_webhook,
+        "webhook_id": webhook_id,
+        "webhook_url": webhook_url,
+        "last_webhook_monotonic": None,
     }
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True
@@ -230,7 +260,13 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         unsub_options = data.get("unsub_options_listener")
         if unsub_options:
             unsub_options()
+            
         unsub_coordinator = data.get("unsub_coordinator_listener")
         if unsub_coordinator:
-            unsub_coordinator()
+            unsub_coordinator()    
+
+        unsub_webhook = data.get("unsub_webhook")
+        if unsub_webhook:
+            unsub_webhook()
+
     return unload_ok

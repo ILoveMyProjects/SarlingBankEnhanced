@@ -74,7 +74,7 @@ This integration adds:
 
 ## Why this exists
 
-The built-in Home Assistant Starling Bank integration is documented as a **legacy integration** and uses YAML configuration. This custom integration keeps the same read-only approach, but adds a modern Home Assistant UX, feature-based setup, Spaces support, scheduled payment visibility, recurring transfer visibility, and richer diagnostics.
+The built-in Home Assistant Starling Bank integration is documented as a **legacy integration** and uses YAML configuration. This custom integration keeps the same read-only approach, but adds a modern Home Assistant UX, feature-based setup, Spaces support, scheduled payment visibility, recurring transfer visibility, and richer diagnostics. It also supports optional event-driven refresh using Starling webhook events.
 
 ## Features
 
@@ -187,6 +187,123 @@ Depending on enabled features, you can choose:
 - selected Spaces
 - upcoming scheduled payment retention limit
 - recent transfer history retention limit
+
+## Webhook refresh support
+
+This integration supports **optional webhook-triggered refresh** for faster updates in Home Assistant.
+
+When enabled, webhook events are used as a **refresh trigger**, and the integration then refreshes data from the Starling API. Regular polling remains in place as a fallback.
+
+### What webhook refresh is used for
+
+According to the Starling developer documentation, Starling webhooks are intended for event-driven updates such as:
+
+- **feed item events**
+- **standing order events**
+
+These events can be registered in the **Starling Developer Portal**. This integration uses them to trigger a coordinator refresh rather than updating entities directly from the webhook payload.
+
+### Current behavior in this integration
+
+When webhook refresh is enabled:
+
+- Home Assistant generates a webhook URL for the integration
+- incoming webhook events trigger `async_request_refresh()`
+- a small debounce window is used to avoid multiple back-to-back refreshes
+- normal polling still remains enabled as a fallback safety mechanism
+- the integration exposes a diagnostic sensor for the **last webhook received**
+- Optional **webhook-triggered refresh** with fallback polling
+- Diagnostic sensor for **last webhook received**
+
+### Important limitation
+
+This integration currently uses webhook events as a **refresh signal only**.
+
+It does **not** treat the webhook payload as the source of truth for account balances, spaces, or scheduled payments.  
+All entity state is still refreshed from the Starling API after the event is received.
+
+This makes the integration safer and more resilient if a webhook is delayed, duplicated, or incomplete.
+
+## How to enable webhook refresh
+
+1. Add the integration normally.
+2. Open the integration and go to **Configure / Options**.
+3. Enable **webhook-triggered refresh**.
+4. Restart or reload the integration if needed.
+5. Copy the generated Home Assistant webhook URL from diagnostics or integration data.
+6. In the **Starling Developer Portal**, register that URL for the webhook events you want to receive.
+
+## Webhook setup in the Starling Developer Portal
+
+Starling documents webhook registration through the **Developer Portal**.
+
+Use the Home Assistant-generated webhook URL when creating the webhook in Starling.
+
+Recommended event coverage:
+
+- feed item events
+- standing order events
+
+These event types are the most useful for this integration because they map well to:
+
+- transaction/feed updates
+- scheduled payment visibility
+- faster account refreshes after account activity
+
+## Security note
+
+Starling documents that **V2 webhooks use a public/private key security model**, while **V1 webhooks used a shared secret**.
+
+At the moment, this integration supports a lightweight authorization check and payload validation, but it does **not yet implement full V2 signature verification**.
+
+Because of that:
+
+- treat the webhook URL as sensitive
+- do not publish it publicly
+- expose Home Assistant securely if receiving internet-facing webhooks
+- prefer HTTPS
+- use a reverse proxy or secure external URL if needed
+
+## Polling vs webhook refresh
+
+Webhook support does **not** replace polling completely.
+
+The integration is designed as:
+
+- **webhook = fast refresh trigger**
+- **polling = fallback reliability**
+
+This means:
+
+- updates can arrive faster after account activity
+- the integration still recovers if a webhook is missed
+- API state remains the source of truth
+
+## Diagnostics for webhook support
+
+When webhook refresh is enabled, diagnostics can show:
+
+- whether webhook refresh is enabled
+- the generated webhook URL
+- masked webhook identifier
+- whether the webhook is registered in runtime
+- when the last webhook event was received
+- Last webhook received
+
+This helps with debugging setup issues and confirming that Home Assistant is receiving events.
+
+## Recommended wording for current status
+
+Webhook support is currently **experimental / early support**.
+
+It is suitable for:
+
+- faster refresh after account activity
+- dashboards
+- automations
+- reducing unnecessary delay between Starling activity and Home Assistant updates
+
+It should not yet be described as a full implementation of all Starling webhook security features until V2 signature verification is added.
 
 ## Getting a Starling personal access token
 

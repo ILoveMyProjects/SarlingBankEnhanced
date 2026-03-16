@@ -18,7 +18,15 @@ CONF_INCLUDE_KITE_SPACES = "include_kite_spaces"
 CONF_SHOW_SAVINGS_ACCOUNT_SPACES = "show_savings_account_spaces"
 CONF_UPCOMING_LIMIT = "upcoming_limit"
 CONF_HISTORY_LIMIT = "history_limit"
+CONF_USE_WEBHOOK = "use_webhook"
+CONF_WEBHOOK_ID = "webhook_id"
+CONF_WEBHOOK_URL = "webhook_url"
+CONF_WEBHOOK_LAST_RECEIVED = "webhook_last_received"
+CONF_WEBHOOK_SECRET = "webhook_secret"
 
+WEBHOOK_DEBOUNCE_SECONDS = 5
+
+DEFAULT_USE_WEBHOOK = False
 DEFAULT_NAME = "Starling"
 DEFAULT_UPCOMING_LIMIT = 5
 DEFAULT_HISTORY_LIMIT = 5
@@ -33,6 +41,7 @@ DEFAULT_SCHEDULED_REFRESH_INTERVAL = timedelta(minutes=30)
 DEFAULT_TRANSFER_HISTORY_REFRESH_INTERVAL = timedelta(minutes=30)
 DEFAULT_BACKOFF_SECONDS = 300
 DEFAULT_TRANSFER_LOOKBACK_DAYS = 90
+
 
 COORDINATOR = "coordinator"
 
@@ -54,7 +63,7 @@ FEATURE_LABELS = {
 FEATURE_PERMISSIONS = {
     FEATURE_MAIN: ["account:read", "balance:read"],
     FEATURE_SPACES: ["account:read", "savings-goal:read", "space:read"],
-    FEATURE_SCHEDULED: ["account:read", "scheduled-payment:read, transaction:read"],
+    FEATURE_SCHEDULED: ["account:read", "scheduled-payment:read", "transaction:read"],
     FEATURE_TRANSFERS: [
         "account:read",
         "savings-goal-transfer:read",

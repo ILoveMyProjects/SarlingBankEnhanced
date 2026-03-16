@@ -34,6 +34,8 @@ from .const import (
     CONF_SANDBOX,
     CONF_SPACE_NAMES,
     CONF_UPCOMING_LIMIT,
+    CONF_USE_WEBHOOK,
+    DEFAULT_USE_WEBHOOK,
     DEFAULT_HISTORY_LIMIT,
     DEFAULT_INCLUDE_KITE_SPACES,
     DEFAULT_INCLUDE_SAVINGS_SPACES,
@@ -714,6 +716,13 @@ class StarlingOptionsFlow(config_entries.OptionsFlow):
         is_savings_account = self._account_type == "SAVINGS"
 
         if user_input is not None:
+            use_webhook = user_input.get(
+                CONF_USE_WEBHOOK,
+                self._entry.options.get(
+                    CONF_USE_WEBHOOK,
+                    self._entry.data.get(CONF_USE_WEBHOOK, DEFAULT_USE_WEBHOOK),
+                ),
+            )
             include_cleared = user_input.get(CONF_INCLUDE_CLEARED, include_main)
             include_effective = user_input.get(CONF_INCLUDE_EFFECTIVE, include_main)
             include_savings_spaces = user_input.get(
@@ -771,6 +780,7 @@ class StarlingOptionsFlow(config_entries.OptionsFlow):
                     CONF_SPACE_NAMES: selected_spaces,
                     CONF_HISTORY_LIMIT: history_limit,
                     CONF_UPCOMING_LIMIT: upcoming_limit,
+                    CONF_USE_WEBHOOK: use_webhook,
                 })
 
         include_savings_spaces = self._entry.options.get(CONF_INCLUDE_SAVINGS_SPACES, self._entry.data.get(CONF_INCLUDE_SAVINGS_SPACES, DEFAULT_INCLUDE_SAVINGS_SPACES))
@@ -799,9 +809,36 @@ class StarlingOptionsFlow(config_entries.OptionsFlow):
             default_space_names = []
 
         schema_fields: dict[Any, Any] = {}
+
+        schema_fields[
+            vol.Optional(
+                CONF_USE_WEBHOOK,
+                default=self._entry.options.get(
+                    CONF_USE_WEBHOOK,
+                    self._entry.data.get(CONF_USE_WEBHOOK, DEFAULT_USE_WEBHOOK),
+                ),
+            )
+        ] = BooleanSelector()
+
         if include_main:
-            schema_fields[vol.Optional(CONF_INCLUDE_CLEARED, default=self._entry.options.get(CONF_INCLUDE_CLEARED, self._entry.data.get(CONF_INCLUDE_CLEARED, True)))] = BooleanSelector()
-            schema_fields[vol.Optional(CONF_INCLUDE_EFFECTIVE, default=self._entry.options.get(CONF_INCLUDE_EFFECTIVE, self._entry.data.get(CONF_INCLUDE_EFFECTIVE, True)))] = BooleanSelector()
+            schema_fields[
+                vol.Optional(
+                    CONF_INCLUDE_CLEARED,
+                    default=self._entry.options.get(
+                        CONF_INCLUDE_CLEARED,
+                        self._entry.data.get(CONF_INCLUDE_CLEARED, True),
+                    ),
+                )
+            ] = BooleanSelector()
+            schema_fields[
+                vol.Optional(
+                    CONF_INCLUDE_EFFECTIVE,
+                    default=self._entry.options.get(
+                        CONF_INCLUDE_EFFECTIVE,
+                        self._entry.data.get(CONF_INCLUDE_EFFECTIVE, True),
+                    ),
+                )
+            ] = BooleanSelector()
         if include_spaces:
             schema_fields[vol.Optional(CONF_INCLUDE_SAVINGS_SPACES, default=include_savings_spaces)] = BooleanSelector()
             if not is_savings_account:
