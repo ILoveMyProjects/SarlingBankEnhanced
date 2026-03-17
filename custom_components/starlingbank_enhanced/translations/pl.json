@@ -3,58 +3,60 @@
     "step": {
       "user": {
         "title": "Wybierz funkcje Starling",
-        "description": "Wybierz, które elementy Twojego konta Starling chcesz używać. Wymagane uprawnienia tokena są pokazane przy każdej opcji.",
+        "description": "Wybierz, z których części konta Starling chcesz korzystać. Wymagane uprawnienia tokena są pokazane przy każdej funkcji.",
         "data": {
           "features": "Funkcje"
         }
       },
       "token": {
         "title": "Połącz Starling Bank Enhanced",
-        "description": "Utwórz Personal Access Token z wymaganymi uprawnieniami dla wybranych funkcji: {permissions}. Następnie wklej token poniżej.\n\nSzczegóły walidacji: {validation_details}",
+        "description": "Utwórz Personal Access Token z wymaganymi uprawnieniami dla wybranych funkcji: {permissions}. Wklej token poniżej.\n\nSzczegóły walidacji: {validation_details}",
         "data": {
           "access_token": "Token dostępu",
           "sandbox": "Użyj sandboxa Starling"
+        }
+      },
+      "account": {
+        "title": "Wybierz konto",
+        "description": "Wybierz, które konto Starling ma zostać użyte dla tej integracji. Szczegóły walidacji: {validation_details}",
+        "data": {
+          "account_uid": "Konto"
+        }
+      },      
+      "webhook": {
+        "title": "Skonfiguruj webhook",
+        "description": "1. Skopiuj ten URL webhooka do Starling Developer Portal:\n{webhook_url}\n\n2. Skopiuj klucz publiczny webhooka ze Starling\n3. Wklej klucz poniżej",
+        "data": {
+          "webhook_public_key": "Klucz publiczny webhooka (PEM)"
         }
       },
       "select_entities": {
         "title": "Wybierz encje Starling",
         "description": "Wybierz, które salda i Spaces mają zostać utworzone, które kategorie Spaces włączyć oraz ile historii przechowywać.",
         "data": {
+          "use_webhook": "Włącz odświeżanie webhookiem",
           "include_cleared_balance": "Utwórz sensor salda zaksięgowanego",
           "include_effective_balance": "Utwórz sensor salda dostępnego",
-          "space_names": "Spaces",
-          "upcoming_limit": "Ile nadchodzących zaplanowanych płatności przechowywać",
-          "history_limit": "Ile ostatnich transferów przechowywać",
-          "include_savings_spaces": "Uwzględnij Savings Spaces",
-          "use_webhook": "Włącz odświeżanie wyzwalane webhookiem",
+          "include_savings_spaces": "Uwzględnij Savings Spaces",          
           "include_spending_spaces": "Uwzględnij Spending Spaces",
           "include_kite_spaces": "Uwzględnij Kite Spaces",
-          "show_savings_account_spaces": "Utwórz osobne sensory Space dla tego konta oszczędnościowego"
+          "show_savings_account_spaces": "Utwórz osobne sensory Space dla tego konta oszczędnościowego",
+          "space_names": "Spaces",
+          "upcoming_limit": "Ile nadchodzących płatności cyklicznych przechowywać",
+          "history_limit": "Ile ostatnich transferów przechowywać"
         }
       },
       "reconfigure": {
         "title": "Połącz ponownie Starling Bank Enhanced",
-        "description": "Zaktualizuj token dla tego konta. Wymagane uprawnienia dla aktywnych funkcji: {permissions}\n\nSzczegóły walidacji: {validation_details}",
+        "description": "Zaktualizuj token dla tego konta. Wymagane uprawnienia dla włączonych funkcji: {permissions}\n\nSzczegóły walidacji: {validation_details}",
         "data": {
           "access_token": "Token dostępu",
           "sandbox": "Użyj sandboxa Starling"
         }
       },
-      "external_url_required": "Webhook wymaga skonfigurowanego external URL Home Assistant",
-      "webhook": {
-        "title": "Skonfiguruj webhook",
-        "description": "1. Skopiuj ten webhook URL do Starling Developer Portal: {webhook_url}\n2. Skopiuj klucz publiczny webhooka ze Starling\n3. Wklej klucz poniżej"
-      },
-      "account": {
-        "title": "Wybierz konto",
-        "description": "Wybierz konto Starling używane przez ten wpis integracji. Szczegóły walidacji: {validation_details}",
-        "data": {
-          "account_uid": "Konto"
-        }
-      },
       "reauth_confirm": {
         "title": "Połącz ponownie Starling Bank Enhanced",
-        "description": "Token Starling nie jest już ważny. Utwórz nowy Personal Access Token z wymaganymi uprawnieniami: {permissions}.\\n\\nSzczegóły walidacji: {validation_details}",
+        "description": "Twój token Starling nie jest już ważny. Utwórz nowy Personal Access Token z wymaganymi uprawnieniami: {permissions}.\n\nSzczegóły walidacji: {validation_details}",
         "data": {
           "access_token": "Token dostępu",
           "sandbox": "Użyj sandboxa Starling"
@@ -63,16 +65,17 @@
     },
     "error": {
       "cannot_connect": "Nie udało się połączyć z API Starling",
-      "no_features_selected": "Wybierz co najmniej jedną funkcję",
-      "no_entities_selected": "Wybierz co najmniej jedno saldo lub Space",
+      "no_features_selected": "Wybierz przynajmniej jedną funkcję",
+      "no_entities_selected": "Wybierz przynajmniej jedno saldo lub Space",
       "webhook_public_key_required": "Klucz publiczny webhooka jest wymagany, gdy włączone jest odświeżanie webhookiem",
-      "permissions_not_ok": "Walidacja tokena nie przeszła dla jednej lub większej liczby wybranych funkcji. Zobacz szczegóły walidacji powyżej.",
+      "external_url_required": "Webhook wymaga skonfigurowanego zewnętrznego adresu URL Home Assistant Settings > System > Network",
+      "permissions_not_ok": "Walidacja tokena nie powiodła się dla co najmniej jednej wybranej funkcji. Zobacz szczegóły walidacji poniżej.",
       "unknown": "Nieoczekiwany błąd"
     },
     "abort": {
       "wrong_account": "Podany token należy do innego konta Starling.",
-      "reconfigure_successful": "Połączenie ze Starling zostało pomyślnie zaktualizowane.",
-      "reauth_successful": "Połączenie ze Starling zostało pomyślnie przywrócone."
+      "reconfigure_successful": "Połączenie Starling zostało pomyślnie zaktualizowane.",
+      "reauth_successful": "Połączenie Starling zostało pomyślnie przywrócone."
     }
   },
   "options": {
@@ -81,17 +84,17 @@
         "title": "Zaktualizuj encje Starling",
         "description": "Wybierz, które salda i Spaces mają pozostać włączone, które kategorie Spaces uwzględnić oraz ile historii przechowywać.",
         "data": {
+          "use_webhook": "Włącz odświeżanie webhookiem",
+          "webhook_public_key": "Klucz publiczny webhooka (PEM)",
           "include_cleared_balance": "Utwórz sensor salda zaksięgowanego",
           "include_effective_balance": "Utwórz sensor salda dostępnego",
-          "space_names": "Spaces",
-          "upcoming_limit": "Ile nadchodzących zaplanowanych płatności przechowywać",
-          "history_limit": "Ile ostatnich transferów przechowywać",
-          "webhook_public_key": "Klucz publiczny webhooka (PEM)",
-          "use_webhook": "Włącz odświeżanie wyzwalane webhookiem",
           "include_savings_spaces": "Uwzględnij Savings Spaces",
           "include_spending_spaces": "Uwzględnij Spending Spaces",
           "include_kite_spaces": "Uwzględnij Kite Spaces",
-          "show_savings_account_spaces": "Utwórz osobne sensory Space dla tego konta oszczędnościowego"
+          "show_savings_account_spaces": "Utwórz osobne sensory Space dla tego konta oszczędnościowego",
+          "space_names": "Spaces",
+          "upcoming_limit": "Ile nadchodzących płatności cyklicznych przechowywać",
+          "history_limit": "Ile ostatnich transferów przechowywać"
         }
       }
     }

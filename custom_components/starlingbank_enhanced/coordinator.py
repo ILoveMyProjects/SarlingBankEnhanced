@@ -231,11 +231,23 @@ class StarlingDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "amount_minor": amount_minor,
             "currency": next_payment_amount.get("currency") or payment_amount.get("currency") or amount_dict.get("currency") or item.get("currency") or "GBP",
             "reference": item.get("reference") or item.get("paymentReference"),
-            "counterparty": item.get("recipientName") or item.get("counterpartyName") or item.get("payeeName"),
+            "counterparty": (
+                item.get("recipientName")
+                or item.get("counterpartyName")
+                or item.get("payeeName")
+                or item.get("reference")
+                or item.get("payeeUid")
+                or item.get("payeeAccountUid")
+            ),
             "next_date": next_date,
             "next_datetime": next_datetime,
             "frequency": recurrence_rule.get("frequency") or item.get("frequency"),
-            "status": item.get("status") or item.get("state") or item.get("paymentType"),
+            "status": (
+                item.get("status")
+                or item.get("state")
+                or item.get("paymentType")
+                or ("cancelled" if item.get("cancelledAt") else "scheduled")
+            ),
             "raw": item,
         }
 
@@ -438,11 +450,23 @@ class StarlingDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             return
 
         try:
-            raw_payments = await self.api.async_get_scheduled_payments(self.account_uid)
+            if not self._cached_account:
+                raise UpdateFailed("Starling account metadata is not available")
+
+            category_uid = self.api.get_default_category_uid(self._cached_account)
+            if not category_uid:
+                raise UpdateFailed(
+                    f"Could not determine default categoryUid for account {self.account_uid}"
+                )
+
+            raw_payments = await self.api.async_get_scheduled_payments_for_category(
+                self.account_uid,
+                category_uid,
+            )
         except StarlingApiError as err:
             if err.status == 404:
                 self._cached_scheduled_payments = []
-                self._feature_issues["scheduled_payments"] = "unsupported"
+                self._feature_issues["scheduled_payments"] = str(err)
                 self._next_scheduled_refresh = self._next_refresh(now, DEFAULT_SCHEDULED_REFRESH_INTERVAL)
                 return
             raise

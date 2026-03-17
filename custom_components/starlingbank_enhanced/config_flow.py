@@ -3,10 +3,12 @@ from __future__ import annotations
 
 from typing import Any
 import logging
+import secrets
 
 import voluptuous as vol
 
 from homeassistant import config_entries
+from homeassistant.components import webhook
 from homeassistant.core import callback
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.network import NoURLAvailableError, get_url
@@ -38,7 +40,9 @@ from .const import (
     CONF_SPACE_NAMES,
     CONF_UPCOMING_LIMIT,
     CONF_USE_WEBHOOK,
+    CONF_WEBHOOK_ID,
     CONF_WEBHOOK_PUBLIC_KEY,
+    CONF_WEBHOOK_URL,
     DEFAULT_USE_WEBHOOK,
     DEFAULT_HISTORY_LIMIT,
     DEFAULT_INCLUDE_KITE_SPACES,
@@ -77,7 +81,11 @@ def _feature_selector() -> SelectSelector:
 
 def _space_selector(space_options: list[dict[str, str]]) -> SelectSelector:
     return SelectSelector(
-        SelectSelectorConfig(options=space_options, multiple=True, mode=SelectSelectorMode.DROPDOWN)
+        SelectSelectorConfig(
+            options=space_options,
+            multiple=True,
+            mode=SelectSelectorMode.DROPDOWN,
+        )
     )
 
 
@@ -87,7 +95,10 @@ def _account_selector(accounts: list[dict[str, Any]]) -> SelectSelector:
             options=[
                 {
                     "value": account.get("accountUid"),
-                    "label": f"{account.get('name') or account.get('accountType') or 'Account'} ({account.get('accountType') or 'UNKNOWN'})",
+                    "label": (
+                        f"{account.get('name') or account.get('accountType') or 'Account'} "
+                        f"({account.get('accountType') or 'UNKNOWN'})"
+                    ),
                 }
                 for account in accounts
                 if account.get("accountUid")
@@ -99,12 +110,9 @@ def _account_selector(accounts: list[dict[str, Any]]) -> SelectSelector:
 
 
 def _int_selector() -> NumberSelector:
-    return NumberSelector(NumberSelectorConfig(min=1, max=25, step=1, mode=NumberSelectorMode.BOX))
-
-
-def _is_auth_error(err: Exception) -> bool:
-    text = str(err).lower()
-    return any(part in text for part in ("401", "403", "forbidden", "unauthorized", "scope", "permission", "insufficient_scope"))
+    return NumberSelector(
+        NumberSelectorConfig(min=1, max=25, step=1, mode=NumberSelectorMode.BOX)
+    )
 
 
 def _category_label(category: str) -> str:
@@ -115,15 +123,22 @@ def _category_label(category: str) -> str:
     }.get(category, "Unknown")
 
 
-
-
-def _allow_savings_account_space_entities(account_type: str | None, filtered_space_names: list[str], current_value: bool | None = None) -> tuple[bool, bool]:
+def _allow_savings_account_space_entities(
+    account_type: str | None,
+    filtered_space_names: list[str],
+    current_value: bool | None = None,
+) -> tuple[bool, bool]:
     if account_type != "SAVINGS":
         return False, True if current_value is None else current_value
 
     offer_checkbox = len(filtered_space_names) > 1
-    default_value = bool(current_value) if current_value is not None else DEFAULT_SHOW_SAVINGS_ACCOUNT_SPACES
+    default_value = (
+        bool(current_value)
+        if current_value is not None
+        else DEFAULT_SHOW_SAVINGS_ACCOUNT_SPACES
+    )
     return offer_checkbox, default_value
+
 
 class StarlingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     VERSION = 1
@@ -135,6 +150,9 @@ class StarlingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self._account_type: str | None = None
         self._space_catalog: dict[str, dict[str, Any]] = {}
         self._features: list[str] = []
+        self._pending_entry_data: dict[str, Any] | None = None
+        self._use_webhook = False
+        self._webhook_id: str | None = None
         self._required_permissions: list[str] = []
         self._validation_details = ""
         self._accounts: list[dict[str, Any]] = []
@@ -153,7 +171,9 @@ class StarlingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 "category": category,
                 "supports_transfers": category == "savings" and bool(goal.get("savingsGoalUid")),
             }
-        self._space_catalog = dict(sorted(catalog.items(), key=lambda item: item[0].lower()))
+        self._space_catalog = dict(
+            sorted(catalog.items(), key=lambda item: item[0].lower())
+        )
 
     async def async_step_reauth(self, entry_data: dict[str, Any]):
         """Start reauthentication flow for an existing entry."""
@@ -174,7 +194,10 @@ class StarlingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         return await self.async_step_reauth_confirm()
 
-    async def async_step_reauth_confirm(self, user_input: dict[str, Any] | None = None):
+    async def async_step_reauth_confirm(
+        self,
+        user_input: dict[str, Any] | None = None,
+    ):
         """Confirm reauthentication with a replacement token."""
         entry = self._reauth_entry
         if entry is None:
@@ -211,10 +234,12 @@ class StarlingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             errors=errors,
             description_placeholders={
                 "permissions": ", ".join(self._required_permissions),
-                "validation_details": self._validation_details or "Enter a new token to restore access.",
+                "validation_details": self._validation_details
+                or "Enter a new token to restore access.",
             },
         )
 
+  
     async def _async_validate_token_for_existing_entry(
         self,
         entry: config_entries.ConfigEntry,
@@ -240,17 +265,16 @@ class StarlingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 errors["base"] = "cannot_connect"
                 return None, errors
 
-            missing_permissions, notes = await self._validate_selected_features(api, account_uid)
-            if missing_permissions:
-                self._validation_details = "Missing permissions: " + ", ".join(missing_permissions)
-                errors["base"] = "permissions_not_ok"
-                return None, errors
+            await self._validate_selected_features(api, account_uid)
 
-            if entry.data.get(CONF_ACCOUNT_UID) and account_uid != entry.data.get(CONF_ACCOUNT_UID):
+            if (
+                entry.data.get(CONF_ACCOUNT_UID)
+                and account_uid != entry.data.get(CONF_ACCOUNT_UID)
+            ):
                 errors["base"] = "wrong_account"
                 return None, errors
 
-            self._validation_details = " | ".join(notes) if notes else ""
+            self._validation_details = ""
             return {
                 **entry.data,
                 CONF_ACCESS_TOKEN: token,
@@ -259,12 +283,16 @@ class StarlingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         except StarlingApiError as err:
             self._validation_details = str(err)
-            errors["base"] = "cannot_connect"
+            if err.status == 429:
+                errors["base"] = "rate_limited"
+            else:
+                errors["base"] = "cannot_connect"
             return None, errors
         except Exception as err:
             self._validation_details = str(err)
             errors["base"] = "unknown"
             return None, errors
+
 
     def _filtered_space_names(
         self,
@@ -301,62 +329,49 @@ class StarlingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             options.append({"value": name, "label": f"{name} [{_category_label(category)}]"})
         return options
 
-    async def _validate_selected_features(self, api: StarlingApiClient, account_uid: str) -> tuple[list[str], list[str]]:
-        missing_permissions: list[str] = []
-        notes: list[str] = []
+
+    async def _validate_selected_features(
+        self,
+        api: StarlingApiClient,
+        account_uid: str,
+    ) -> None:
         savings_goals: list[dict[str, Any]] = []
 
         if FEATURE_MAIN in self._features:
-            try:
-                await api.async_get_balance(account_uid)
-            except Exception as err:
-                if _is_auth_error(err):
-                    missing_permissions.append("balance:read")
-                else:
-                    notes.append(f"Main balance check returned: {err}")
+            await api.async_get_balance(account_uid)
 
         if FEATURE_SPACES in self._features or FEATURE_TRANSFERS in self._features:
-            try:
-                savings_goals = await api.async_get_savings_goals(account_uid)
-                self._set_spaces_from_goals(savings_goals)
-            except Exception as err:
-                if _is_auth_error(err):
-                    missing_permissions.extend(["savings-goal:read", "space:read"])
-                else:
-                    notes.append(f"Spaces check returned: {err}")
-                    self._space_catalog = {}
+            savings_goals = await api.async_get_savings_goals(account_uid)
+            self._set_spaces_from_goals(savings_goals)
 
         if FEATURE_SCHEDULED in self._features:
-            try:
-                await api.async_get_scheduled_payments(account_uid)
-            except Exception as err:
-                if _is_auth_error(err):
-                    missing_permissions.append("scheduled-payment:read")
-                else:
-                    notes.append(f"Scheduled payments check returned non-blocking response: {err}")
+            await api.async_validate_scheduled_payments_access(account_uid)
 
         if FEATURE_TRANSFERS in self._features:
-            try:
-                first_goal_name = next(
-                    (
-                        name
-                        for name, meta in self._space_catalog.items()
-                        if meta.get("supports_transfers")
-                    ),
-                    None,
-                )
-                first_goal = next((goal for goal in savings_goals if (goal.get("name") or "").strip() == first_goal_name), None)
-                if first_goal is None or not first_goal.get("savingsGoalUid"):
-                    notes.append("Savings goal transfers check skipped: no savingsGoalUid available.")
-                else:
-                    await api.async_get_recurring_transfer(account_uid, first_goal["savingsGoalUid"])
-            except Exception as err:
-                if _is_auth_error(err):
-                    missing_permissions.append("savings-goal-transfer:read")
-                else:
-                    notes.append(f"Savings goal transfers check returned non-blocking response: {err}")
+            first_goal_name = next(
+                (
+                    name
+                    for name, meta in self._space_catalog.items()
+                    if meta.get("supports_transfers")
+                ),
+                None,
+            )
 
-        return sorted(set(missing_permissions)), notes
+            first_goal = next(
+                (
+                    goal
+                    for goal in savings_goals
+                    if (goal.get("name") or "").strip() == first_goal_name
+                ),
+                None,
+            )
+
+            if first_goal and first_goal.get("savingsGoalUid"):
+                await api.async_get_recurring_transfer(
+                    account_uid,
+                    first_goal["savingsGoalUid"],
+                )
+
 
     async def async_step_user(self, user_input: dict[str, Any] | None = None):
         errors: dict[str, str] = {}
@@ -375,10 +390,16 @@ class StarlingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         return self.async_show_form(
             step_id="user",
-            data_schema=vol.Schema({vol.Required(CONF_FEATURES, default=[FEATURE_MAIN, FEATURE_SPACES]): _feature_selector()}),
+            data_schema=vol.Schema(
+                {
+                    vol.Required(
+                        CONF_FEATURES,
+                        default=[FEATURE_MAIN, FEATURE_SPACES],
+                    ): _feature_selector()
+                }
+            ),
             errors=errors,
         )
-
 
     async def async_step_token(self, user_input: dict[str, Any] | None = None):
         errors: dict[str, str] = {}
@@ -405,32 +426,42 @@ class StarlingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     err,
                 )
                 self._validation_details = str(err)
-                errors["base"] = "cannot_connect"
+                if err.status == 429:
+                    errors["base"] = "rate_limited"
+                else:
+                    errors["base"] = "cannot_connect"
             except Exception as err:
                 self._validation_details = str(err)
                 errors["base"] = "unknown"
 
         return self.async_show_form(
             step_id="token",
-            data_schema=vol.Schema({
-                vol.Required(CONF_ACCESS_TOKEN): str,
-                vol.Optional(CONF_SANDBOX, default=False): BooleanSelector(),
-            }),
+            data_schema=vol.Schema(
+                {
+                    vol.Required(CONF_ACCESS_TOKEN): str,
+                    vol.Optional(CONF_SANDBOX, default=False): BooleanSelector(),
+                }
+            ),
             errors=errors,
             description_placeholders={
                 "permissions": ", ".join(self._required_permissions),
                 "validation_details": self._validation_details or "No validation errors yet.",
             },
         )
-    
-    
+
     async def async_step_webhook(self, user_input: dict[str, Any] | None = None):
         errors: dict[str, str] = {}
 
         if not self._pending_entry_data:
             return self.async_abort(reason="unknown")
 
-        webhook_url_preview = None
+        if not self._webhook_id:
+            self._webhook_id = webhook.async_generate_id()
+            if not self._webhook_id:
+                self._webhook_id = secrets.token_hex(32)
+
+        webhook_url_preview: str | None = None
+        external_url_available = False
 
         try:
             base_url = get_url(
@@ -439,14 +470,18 @@ class StarlingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 allow_external=True,
                 allow_cloud=True,
             )
-            webhook_url_preview = f"{base_url}/api/webhook/<generated-after-save>"
+            webhook_url_preview = f"{base_url}/api/webhook/{self._webhook_id}"
+            external_url_available = True
         except NoURLAvailableError:
-            errors["base"] = "external_url_required"
+            webhook_url_preview = "webhook_no_key_configured"
+            external_url_available = False
 
-        if user_input is not None and not errors:
+        if user_input is not None:
             webhook_public_key = user_input.get(CONF_WEBHOOK_PUBLIC_KEY, "").strip()
 
-            if not webhook_public_key:
+            if not external_url_available:
+                errors["base"] = "external_url_required"
+            elif not webhook_public_key:
                 errors["base"] = "webhook_public_key_required"
             else:
                 return self.async_create_entry(
@@ -454,6 +489,8 @@ class StarlingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     data={
                         **self._pending_entry_data,
                         CONF_WEBHOOK_PUBLIC_KEY: webhook_public_key,
+                        CONF_WEBHOOK_ID: self._webhook_id,
+                        CONF_WEBHOOK_URL: webhook_url_preview,
                     },
                 )
 
@@ -472,7 +509,6 @@ class StarlingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             },
         )
 
-
     async def async_step_account(self, user_input: dict[str, Any] | None = None):
         errors: dict[str, str] = {}
         if user_input is not None:
@@ -483,30 +519,39 @@ class StarlingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 account = await api.async_get_account(self._account_uid)
                 self._account_name = account.get("name") or DEFAULT_NAME
                 self._account_type = account.get("accountType")
-                missing_permissions, notes = await self._validate_selected_features(api, self._account_uid)
-                if missing_permissions:
-                    self._validation_details = "Missing permissions: " + ", ".join(missing_permissions)
-                    errors["base"] = "permissions_not_ok"
-                else:
-                    self._validation_details = " | ".join(notes) if notes else ""
-                    await self.async_set_unique_id(self._account_uid)
-                    self._abort_if_unique_id_configured()
-                    return await self.async_step_select_entities()
+               
+                await self._validate_selected_features(
+                    api,
+                    self._account_uid,
+                )
+                self._validation_details = ""
+                await self.async_set_unique_id(self._account_uid)
+                self._abort_if_unique_id_configured()
+                return await self.async_step_select_entities()
+
             except Exception as err:
                 self._validation_details = str(err)
                 errors["base"] = "cannot_connect"
 
-        default_uid = self._account_uid or (self._accounts[0].get("accountUid") if self._accounts else None)
+        default_uid = self._account_uid or (
+            self._accounts[0].get("accountUid") if self._accounts else None
+        )
         return self.async_show_form(
             step_id="account",
-            data_schema=vol.Schema({vol.Required(CONF_ACCOUNT_UID, default=default_uid): _account_selector(self._accounts)}),
+            data_schema=vol.Schema(
+                {vol.Required(CONF_ACCOUNT_UID, default=default_uid): _account_selector(self._accounts)}
+            ),
             errors=errors,
             description_placeholders={
-                "validation_details": self._validation_details or "Choose which Starling account to use for this entry."
+                "validation_details": self._validation_details
+                or "Choose which Starling account to use for this entry."
             },
         )
 
-    async def async_step_select_entities(self, user_input: dict[str, Any] | None = None):
+    async def async_step_select_entities(
+        self,
+        user_input: dict[str, Any] | None = None,
+    ):
         errors: dict[str, str] = {}
         include_main = FEATURE_MAIN in self._features
         include_spaces = FEATURE_SPACES in self._features
@@ -516,8 +561,6 @@ class StarlingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         if user_input is not None:
             use_webhook = user_input.get(CONF_USE_WEBHOOK, DEFAULT_USE_WEBHOOK)
-            webhook_public_key = user_input.get(CONF_WEBHOOK_PUBLIC_KEY, "").strip()
-
             include_cleared = user_input.get(CONF_INCLUDE_CLEARED, include_main)
             include_effective = user_input.get(CONF_INCLUDE_EFFECTIVE, include_main)
             include_savings_spaces = user_input.get(
@@ -527,7 +570,10 @@ class StarlingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             include_spending_spaces = (
                 False
                 if is_savings_account
-                else user_input.get(CONF_INCLUDE_SPENDING_SPACES, DEFAULT_INCLUDE_SPENDING_SPACES)
+                else user_input.get(
+                    CONF_INCLUDE_SPENDING_SPACES,
+                    DEFAULT_INCLUDE_SPENDING_SPACES,
+                )
             )
             include_kite_spaces = (
                 False
@@ -540,10 +586,12 @@ class StarlingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 include_spending=include_spending_spaces,
                 include_kite=include_kite_spaces,
             )
-            offer_savings_checkbox, default_show_savings_spaces = _allow_savings_account_space_entities(
-                self._account_type,
-                filtered_space_names,
-                user_input.get(CONF_SHOW_SAVINGS_ACCOUNT_SPACES),
+            offer_savings_checkbox, default_show_savings_spaces = (
+                _allow_savings_account_space_entities(
+                    self._account_type,
+                    filtered_space_names,
+                    user_input.get(CONF_SHOW_SAVINGS_ACCOUNT_SPACES),
+                )
             )
             show_savings_account_spaces = (
                 default_show_savings_spaces
@@ -553,7 +601,11 @@ class StarlingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
             allowed_space_names = set(filtered_space_names)
             selected_spaces = (
-                [name for name in user_input.get(CONF_SPACE_NAMES, []) if name in allowed_space_names]
+                [
+                    name
+                    for name in user_input.get(CONF_SPACE_NAMES, [])
+                    if name in allowed_space_names
+                ]
                 if include_spaces
                 else []
             )
@@ -572,7 +624,8 @@ class StarlingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             if include_spaces and selected_spaces:
                 has_any_entity = True
             if include_transfers and any(
-                self._space_catalog.get(name, {}).get("supports_transfers") for name in selected_spaces
+                self._space_catalog.get(name, {}).get("supports_transfers")
+                for name in selected_spaces
             ):
                 has_any_entity = True
 
@@ -609,9 +662,7 @@ class StarlingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         include_spending_spaces = (
             False if is_savings_account else DEFAULT_INCLUDE_SPENDING_SPACES
         )
-        include_kite_spaces = (
-            False if is_savings_account else DEFAULT_INCLUDE_KITE_SPACES
-        )
+        include_kite_spaces = False if is_savings_account else DEFAULT_INCLUDE_KITE_SPACES
 
         default_space_names = self._filtered_space_names(
             include_savings=include_savings_spaces,
@@ -619,10 +670,12 @@ class StarlingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             include_kite=include_kite_spaces,
         )
 
-        offer_savings_checkbox, default_show_savings_spaces = _allow_savings_account_space_entities(
-            self._account_type,
-            default_space_names,
-            DEFAULT_SHOW_SAVINGS_ACCOUNT_SPACES,
+        offer_savings_checkbox, default_show_savings_spaces = (
+            _allow_savings_account_space_entities(
+                self._account_type,
+                default_space_names,
+                DEFAULT_SHOW_SAVINGS_ACCOUNT_SPACES,
+            )
         )
 
         schema_fields: dict[Any, Any] = {}
@@ -642,7 +695,10 @@ class StarlingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
             if not is_savings_account:
                 schema_fields[
-                    vol.Optional(CONF_INCLUDE_SPENDING_SPACES, default=include_spending_spaces)
+                    vol.Optional(
+                        CONF_INCLUDE_SPENDING_SPACES,
+                        default=include_spending_spaces,
+                    )
                 ] = BooleanSelector()
                 schema_fields[
                     vol.Optional(CONF_INCLUDE_KITE_SPACES, default=include_kite_spaces)
@@ -688,7 +744,10 @@ class StarlingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             errors=errors,
         )
 
-    async def async_step_reconfigure(self, user_input: dict[str, Any] | None = None):
+    async def async_step_reconfigure(
+        self,
+        user_input: dict[str, Any] | None = None,
+    ):
         entry = self._get_reconfigure_entry()
         errors: dict[str, str] = {}
         permissions: set[str] = set()
@@ -723,20 +782,27 @@ class StarlingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 errors=errors,
                 description_placeholders={
                     "permissions": ", ".join(sorted(permissions)),
-                    "validation_details": self._validation_details or "Enter a replacement token.",
+                    "validation_details": self._validation_details
+                    or "Enter a replacement token.",
                 },
             )
 
         return self.async_show_form(
             step_id="reconfigure",
-            data_schema=vol.Schema({
-                vol.Required(CONF_ACCESS_TOKEN): str,
-                vol.Optional(CONF_SANDBOX, default=entry.data.get(CONF_SANDBOX, False)): BooleanSelector(),
-            }),
+            data_schema=vol.Schema(
+                {
+                    vol.Required(CONF_ACCESS_TOKEN): str,
+                    vol.Optional(
+                        CONF_SANDBOX,
+                        default=entry.data.get(CONF_SANDBOX, False),
+                    ): BooleanSelector(),
+                }
+            ),
             errors=errors,
             description_placeholders={
                 "permissions": ", ".join(sorted(permissions)),
-                "validation_details": self._validation_details or f"Current token: {_mask_token(entry.data.get(CONF_ACCESS_TOKEN, ''))}",
+                "validation_details": self._validation_details
+                or f"Current token: {_mask_token(entry.data.get(CONF_ACCESS_TOKEN, ''))}",
             },
         )
 
@@ -748,8 +814,6 @@ class StarlingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
 class StarlingOptionsFlow(config_entries.OptionsFlow):
     def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
-        self._pending_entry_data: dict[str, Any] | None = None
-        self._use_webhook = False
         self._entry = config_entry
         self._account_type: str | None = None
         self._space_catalog: dict[str, dict[str, Any]] = {}
@@ -759,7 +823,11 @@ class StarlingOptionsFlow(config_entries.OptionsFlow):
             return
 
         session = async_get_clientsession(self.hass)
-        api = StarlingApiClient(session, self._entry.data[CONF_ACCESS_TOKEN], self._entry.data.get(CONF_SANDBOX, False))
+        api = StarlingApiClient(
+            session,
+            self._entry.data[CONF_ACCESS_TOKEN],
+            self._entry.data.get(CONF_SANDBOX, False),
+        )
         account_uid = self._entry.data.get(CONF_ACCOUNT_UID)
 
         try:
@@ -772,7 +840,10 @@ class StarlingOptionsFlow(config_entries.OptionsFlow):
                 self._account_type = account.get("accountType")
                 goals = await api.async_get_savings_goals(account.get("accountUid"))
         except Exception as err:
-            _LOGGER.debug("Options flow could not refresh spaces, using saved values: error=%s", err)
+            _LOGGER.debug(
+                "Options flow could not refresh spaces, using saved values: error=%s",
+                err,
+            )
             goals = []
             self._account_type = self._entry.data.get("account_type")
 
@@ -788,8 +859,10 @@ class StarlingOptionsFlow(config_entries.OptionsFlow):
                 "supports_transfers": category == "savings" and bool(goal.get("savingsGoalUid")),
             }
 
-        # Keep previously selected spaces available even if refresh failed.
-        for name in self._entry.options.get(CONF_SPACE_NAMES, self._entry.data.get(CONF_SPACE_NAMES, [])):
+        for name in self._entry.options.get(
+            CONF_SPACE_NAMES,
+            self._entry.data.get(CONF_SPACE_NAMES, []),
+        ):
             if name not in catalog:
                 catalog[name] = {
                     "name": name,
@@ -797,7 +870,9 @@ class StarlingOptionsFlow(config_entries.OptionsFlow):
                     "supports_transfers": True,
                 }
 
-        self._space_catalog = dict(sorted(catalog.items(), key=lambda item: item[0].lower()))
+        self._space_catalog = dict(
+            sorted(catalog.items(), key=lambda item: item[0].lower())
+        )
 
     def _filtered_space_names(
         self,
@@ -881,7 +956,10 @@ class StarlingOptionsFlow(config_entries.OptionsFlow):
                 CONF_INCLUDE_SAVINGS_SPACES,
                 self._entry.options.get(
                     CONF_INCLUDE_SAVINGS_SPACES,
-                    self._entry.data.get(CONF_INCLUDE_SAVINGS_SPACES, DEFAULT_INCLUDE_SAVINGS_SPACES),
+                    self._entry.data.get(
+                        CONF_INCLUDE_SAVINGS_SPACES,
+                        DEFAULT_INCLUDE_SAVINGS_SPACES,
+                    ),
                 ),
             )
             include_spending_spaces = (
@@ -891,7 +969,10 @@ class StarlingOptionsFlow(config_entries.OptionsFlow):
                     CONF_INCLUDE_SPENDING_SPACES,
                     self._entry.options.get(
                         CONF_INCLUDE_SPENDING_SPACES,
-                        self._entry.data.get(CONF_INCLUDE_SPENDING_SPACES, DEFAULT_INCLUDE_SPENDING_SPACES),
+                        self._entry.data.get(
+                            CONF_INCLUDE_SPENDING_SPACES,
+                            DEFAULT_INCLUDE_SPENDING_SPACES,
+                        ),
                     ),
                 )
             )
@@ -902,7 +983,10 @@ class StarlingOptionsFlow(config_entries.OptionsFlow):
                     CONF_INCLUDE_KITE_SPACES,
                     self._entry.options.get(
                         CONF_INCLUDE_KITE_SPACES,
-                        self._entry.data.get(CONF_INCLUDE_KITE_SPACES, DEFAULT_INCLUDE_KITE_SPACES),
+                        self._entry.data.get(
+                            CONF_INCLUDE_KITE_SPACES,
+                            DEFAULT_INCLUDE_KITE_SPACES,
+                        ),
                     ),
                 )
             )
@@ -913,19 +997,21 @@ class StarlingOptionsFlow(config_entries.OptionsFlow):
                 include_kite=include_kite_spaces,
             )
 
-            offer_savings_checkbox, default_show_savings_spaces = _allow_savings_account_space_entities(
-                self._account_type,
-                filtered_space_names,
-                user_input.get(
-                    CONF_SHOW_SAVINGS_ACCOUNT_SPACES,
-                    self._entry.options.get(
+            offer_savings_checkbox, default_show_savings_spaces = (
+                _allow_savings_account_space_entities(
+                    self._account_type,
+                    filtered_space_names,
+                    user_input.get(
                         CONF_SHOW_SAVINGS_ACCOUNT_SPACES,
-                        self._entry.data.get(
+                        self._entry.options.get(
                             CONF_SHOW_SAVINGS_ACCOUNT_SPACES,
-                            DEFAULT_SHOW_SAVINGS_ACCOUNT_SPACES,
+                            self._entry.data.get(
+                                CONF_SHOW_SAVINGS_ACCOUNT_SPACES,
+                                DEFAULT_SHOW_SAVINGS_ACCOUNT_SPACES,
+                            ),
                         ),
                     ),
-                ),
+                )
             )
 
             show_savings_account_spaces = (
@@ -936,7 +1022,11 @@ class StarlingOptionsFlow(config_entries.OptionsFlow):
 
             allowed_space_names = set(filtered_space_names)
             selected_spaces = (
-                [name for name in user_input.get(CONF_SPACE_NAMES, []) if name in allowed_space_names]
+                [
+                    name
+                    for name in user_input.get(CONF_SPACE_NAMES, [])
+                    if name in allowed_space_names
+                ]
                 if include_spaces
                 else []
             )
@@ -971,7 +1061,8 @@ class StarlingOptionsFlow(config_entries.OptionsFlow):
             if include_spaces and selected_spaces:
                 has_any_entity = True
             if include_transfers and any(
-                self._space_catalog.get(name, {}).get("supports_transfers") for name in selected_spaces
+                self._space_catalog.get(name, {}).get("supports_transfers")
+                for name in selected_spaces
             ):
                 has_any_entity = True
 
@@ -1005,7 +1096,10 @@ class StarlingOptionsFlow(config_entries.OptionsFlow):
             if is_savings_account
             else self._entry.options.get(
                 CONF_INCLUDE_SPENDING_SPACES,
-                self._entry.data.get(CONF_INCLUDE_SPENDING_SPACES, DEFAULT_INCLUDE_SPENDING_SPACES),
+                self._entry.data.get(
+                    CONF_INCLUDE_SPENDING_SPACES,
+                    DEFAULT_INCLUDE_SPENDING_SPACES,
+                ),
             )
         )
         include_kite_spaces = (
@@ -1023,16 +1117,18 @@ class StarlingOptionsFlow(config_entries.OptionsFlow):
             include_kite=include_kite_spaces,
         )
 
-        offer_savings_checkbox, default_show_savings_spaces = _allow_savings_account_space_entities(
-            self._account_type,
-            filtered_default_space_names,
-            self._entry.options.get(
-                CONF_SHOW_SAVINGS_ACCOUNT_SPACES,
-                self._entry.data.get(
+        offer_savings_checkbox, default_show_savings_spaces = (
+            _allow_savings_account_space_entities(
+                self._account_type,
+                filtered_default_space_names,
+                self._entry.options.get(
                     CONF_SHOW_SAVINGS_ACCOUNT_SPACES,
-                    DEFAULT_SHOW_SAVINGS_ACCOUNT_SPACES,
+                    self._entry.data.get(
+                        CONF_SHOW_SAVINGS_ACCOUNT_SPACES,
+                        DEFAULT_SHOW_SAVINGS_ACCOUNT_SPACES,
+                    ),
                 ),
-            ),
+            )
         )
 
         default_space_names = [
@@ -1100,7 +1196,10 @@ class StarlingOptionsFlow(config_entries.OptionsFlow):
 
             if not is_savings_account:
                 schema_fields[
-                    vol.Optional(CONF_INCLUDE_SPENDING_SPACES, default=include_spending_spaces)
+                    vol.Optional(
+                        CONF_INCLUDE_SPENDING_SPACES,
+                        default=include_spending_spaces,
+                    )
                 ] = BooleanSelector()
                 schema_fields[
                     vol.Optional(CONF_INCLUDE_KITE_SPACES, default=include_kite_spaces)

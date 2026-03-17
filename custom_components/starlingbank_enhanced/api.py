@@ -6,6 +6,7 @@ from email.utils import parsedate_to_datetime
 import json
 import logging
 import time
+import asyncio
 from typing import Any
 from urllib.parse import urlencode
 
@@ -47,6 +48,8 @@ class StarlingApiClient:
         self._request_counter = 0
         self._backoff_until: datetime | None = None
         self._backoff_reason: str | None = None
+        self._min_request_interval = 0.25
+        self._last_request_started = 0.0
 
     @property
     def _headers(self) -> dict[str, str]:
@@ -55,6 +58,9 @@ class StarlingApiClient:
             "Accept": "application/json",
         }
 
+    def get_default_category_uid(self, account: dict[str, Any]) -> str | None:
+        return self._default_category_uid_from_account(account)
+    
     def _mask_token(self) -> str:
         token = self._access_token or ""
         if len(token) <= 8:
@@ -92,6 +98,14 @@ class StarlingApiClient:
             reason,
         )
 
+    def _format_rate_limit_message(self, path: str, retry_after: str | None) -> str:
+        seconds = self._parse_retry_after_seconds(retry_after)
+        until = datetime.now(UTC) + timedelta(seconds=seconds)
+        return (
+            f"GET {path} failed: HTTP 429: rate limited, "
+            f"retry after {seconds}s (until {until.isoformat()})"
+        )
+
     @property
     def backoff_until(self) -> datetime | None:
         return self._backoff_until
@@ -99,6 +113,18 @@ class StarlingApiClient:
     @property
     def backoff_reason(self) -> str | None:
         return self._backoff_reason
+
+    @staticmethod
+    def _default_category_uid_from_account(account: dict[str, Any]) -> str | None:
+        for key in (
+            "defaultCategory",
+            "defaultCategoryUid",
+            "categoryUid",
+        ):
+            value = account.get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+        return None
 
     def _raise_if_backing_off(self, path: str) -> None:
         if not self._backoff_until:
@@ -144,9 +170,85 @@ class StarlingApiClient:
             return str(error)
         return body[:500]
 
+    async def _wait_for_client_rate_limit(self) -> None:
+        now = time.monotonic()
+        elapsed = now - self._last_request_started
+        remaining = self._min_request_interval - elapsed
+        if remaining > 0:
+            await asyncio.sleep(remaining)
+        self._last_request_started = time.monotonic()
+
+    async def async_validate_scheduled_payments_access(self, account_uid: str) -> None:
+        account = await self.async_get_account(account_uid)
+        category_uid = self._default_category_uid_from_account(account)
+
+        if not category_uid:
+            raise StarlingApiError(
+                f"Could not determine default categoryUid for account {account_uid}"
+            )
+
+        await self._get(
+            f"/api/v2/payments/local/account/{account_uid}/category/{category_uid}/standing-orders"
+        )
+
+    async def async_get_scheduled_payments_for_category(
+        self,
+        account_uid: str,
+        category_uid: str,
+    ) -> list[dict[str, Any]]:
+        standing_orders = await self.async_get_standing_orders(account_uid, category_uid)
+        scheduled_payments: list[dict[str, Any]] = []
+
+        for order in standing_orders:
+            payment_order_uid = str(order.get("paymentOrderUid") or "").strip()
+            if not payment_order_uid:
+                continue
+
+            if order.get("cancelledAt"):
+                continue
+
+            recurrence = order.get("standingOrderRecurrence") or {}
+            if not recurrence.get("startDate"):
+                continue
+
+            try:
+                upcoming = await self.async_get_standing_order_upcoming_payments(
+                    account_uid,
+                    category_uid,
+                    payment_order_uid,
+                )
+            except StarlingApiError as err:
+                if err.status == 404 or "http 404" in str(err).lower():
+                    upcoming = []
+                else:
+                    raise
+
+            if not upcoming:
+                next_date = order.get("nextDate")
+                if isinstance(next_date, str) and next_date.strip():
+                    upcoming = [{"nextDate": next_date}]
+
+            for item in upcoming:
+                enriched = dict(item)
+                enriched.setdefault("paymentOrderUid", payment_order_uid)
+                enriched.setdefault("accountUid", account_uid)
+                enriched.setdefault("categoryUid", order.get("categoryUid") or category_uid)
+                enriched.setdefault("reference", order.get("reference"))
+                enriched.setdefault("payeeUid", order.get("payeeUid"))
+                enriched.setdefault("payeeAccountUid", order.get("payeeAccountUid"))
+                enriched.setdefault("amount", order.get("amount"))
+                enriched.setdefault("standingOrderRecurrence", recurrence)
+                enriched.setdefault("updatedAt", order.get("updatedAt"))
+                enriched["_source_order"] = order
+                scheduled_payments.append(enriched)
+
+        scheduled_payments.sort(key=lambda x: x.get("nextDate") or "")
+        return scheduled_payments
+
     async def _get(self, path: str) -> dict[str, Any]:
         self._raise_if_backing_off(path)
-
+        await self._wait_for_client_rate_limit()
+  
         url = f"{self._base_url}{path}"
         started = time.monotonic()
         self._request_counter += 1
@@ -196,7 +298,7 @@ class StarlingApiClient:
                             details,
                         )
                     else:
-                        log_fn = _LOGGER.debug if resp.status == 404 and any(marker in path for marker in ("/recurring-transfer", "/payments/scheduled", "/settled-transactions-between")) else _LOGGER.warning
+                        log_fn = _LOGGER.debug if resp.status == 404 and any(marker in path for marker in ("/recurring-transfer", "/standing-orders", "/settled-transactions-between")) else _LOGGER.warning
                         log_fn(
                             "Starling API error response: path=%s status=%s elapsed_ms=%s body=%s",
                             path,
@@ -205,8 +307,14 @@ class StarlingApiClient:
                             details,
                         )
 
+                    if resp.status == 429:
+                        message = self._format_rate_limit_message(path, retry_after)
+                    else:
+                        suffix = f": {details}" if details else ""
+                        message = f"GET {path} failed: HTTP {resp.status}{suffix}"
+
                     raise StarlingApiError(
-                        f"GET {path} failed: HTTP {resp.status}: {details}",
+                        message,
                         status=resp.status,
                         body=text,
                         retry_after=retry_after,
@@ -336,6 +444,64 @@ class StarlingApiClient:
 
         return [merged[key] for key in order]
 
+
+    async def async_get_standing_orders(
+        self,
+        account_uid: str,
+        category_uid: str,
+    ) -> list[dict[str, Any]]:
+        data = await self._get(
+            f"/api/v2/payments/local/account/{account_uid}/category/{category_uid}/standing-orders"
+        )
+
+        if isinstance(data, dict):
+            for key in ("standingOrders", "paymentOrders", "items"):
+                value = data.get(key)
+                if isinstance(value, list):
+                    return [item for item in value if isinstance(item, dict)]
+
+        if isinstance(data, list):
+            return [item for item in data if isinstance(item, dict)]
+
+        return []
+
+
+    async def async_get_standing_order_upcoming_payments(
+        self,
+        account_uid: str,
+        category_uid: str,
+        payment_order_uid: str,
+    ) -> list[dict[str, Any]]:
+        data = await self._get(
+            f"/api/v2/payments/local/account/{account_uid}/category/{category_uid}/standing-orders/{payment_order_uid}/upcoming-payments"
+        )
+
+        if isinstance(data, dict):
+            value = data.get("nextPaymentDates")
+            if isinstance(value, list):
+                return [
+                    {"nextDate": item}
+                    for item in value
+                    if isinstance(item, str) and item.strip()
+                ]
+
+        return []
+
+
+    async def async_get_scheduled_payments(self, account_uid: str) -> list[dict[str, Any]]:
+        account = await self.async_get_account(account_uid)
+        category_uid = self._default_category_uid_from_account(account)
+
+        if not category_uid:
+            raise StarlingApiError(
+                f"Could not determine default categoryUid for account {account_uid}"
+            )
+
+        return await self.async_get_scheduled_payments_for_category(
+            account_uid,
+            category_uid,
+        )
+
     async def async_get_savings_goals(self, account_uid: str) -> list[dict[str, Any]]:
         savings_goals: list[dict[str, Any]] = []
         spaces_goals: list[dict[str, Any]] = []
@@ -426,22 +592,10 @@ class StarlingApiClient:
                 return None
             raise
         return data or None
+    
 
-    async def async_get_scheduled_payments(self, account_uid: str) -> list[dict[str, Any]]:
-        try:
-            data = await self._get(f"/api/v2/account/{account_uid}/payments/scheduled")
-        except StarlingApiError as err:
-            if err.status == 404 or "http 404" in str(err).lower():
-                return []
-            raise
 
-        for key in ("paymentOrders", "payments", "scheduledPayments"):
-            value = data.get(key)
-            if isinstance(value, list):
-                return value
-        if isinstance(data, list):
-            return data
-        return []
+   
 
     async def async_get_settled_feed_items(self, account_uid: str, category_uid: str, *, days: int = DEFAULT_TRANSFER_LOOKBACK_DAYS) -> list[dict[str, Any]]:
         now = datetime.now(UTC)

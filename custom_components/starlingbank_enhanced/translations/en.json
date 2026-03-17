@@ -16,20 +16,34 @@
           "sandbox": "Use Starling sandbox"
         }
       },
+      "account": {
+        "title": "Choose account",
+        "description": "Choose which Starling account should be used for this entry. Validation details: {validation_details}",
+        "data": {
+          "account_uid": "Account"
+        }
+      },
+      "webhook": {
+        "title": "Configure webhook",
+        "description": "1. Copy this webhook URL into Starling Developer Portal:\n{webhook_url}\n\n2. Copy the webhook public key from Starling\n3. Paste the public key below",
+        "data": {
+          "webhook_public_key": "Webhook public key (PEM)"
+        }
+      },
       "select_entities": {
         "title": "Choose Starling entities",
         "description": "Select which balances and Spaces should be created, which Space categories to include, and how much history to keep.",
         "data": {
+          "use_webhook": "Enable webhook-triggered refresh",
           "include_cleared_balance": "Create cleared balance sensor",
           "include_effective_balance": "Create effective balance sensor",
-          "space_names": "Spaces",
-          "upcoming_limit": "Number of upcoming scheduled payments to keep",
-          "history_limit": "Number of recent transfers to keep",
-          "use_webhook": "Enable webhook-triggered refresh",
           "include_savings_spaces": "Include Savings Spaces",
           "include_spending_spaces": "Include Spending Spaces",
           "include_kite_spaces": "Include Kite Spaces",
-          "show_savings_account_spaces": "Create separate Space sensors for this savings account"
+          "show_savings_account_spaces": "Create separate Space sensors for this savings account",
+          "space_names": "Spaces",
+          "upcoming_limit": "Number of upcoming scheduled payments to keep",
+          "history_limit": "Number of recent transfers to keep"
         }
       },
       "reconfigure": {
@@ -42,29 +56,18 @@
       },
       "reauth_confirm": {
         "title": "Reconnect Starling Bank Enhanced",
-        "description": "Your Starling token is no longer valid. Create a new Personal Access Token with the required permissions: {permissions}.\\n\\nValidation details: {validation_details}",
+        "description": "Your Starling token is no longer valid. Create a new Personal Access Token with the required permissions: {permissions}.\n\nValidation details: {validation_details}",
         "data": {
           "access_token": "Access token",
           "sandbox": "Use Starling sandbox"
         }
-      },
-      "external_url_required": "External Home Assistant URL required for webhook",
-      "webhook": {
-        "title": "Configure webhook",
-        "description": "1. Copy this webhook URL into Starling Developer Portal: {webhook_url}\n2. Copy the webhook public key from Starling\n3. Paste the public key below"
-      },
-      "account": {
-        "title": "Choose account",
-        "description": "Choose which Starling account should be used for this entry. Validation details: {validation_details}",
-        "data": {
-          "account_uid": "Account"
-        }
       }
-    },
+    },         
     "error": {
       "cannot_connect": "Could not connect to the Starling API",
       "no_features_selected": "Select at least one feature",
       "no_entities_selected": "Select at least one balance or Space",
+      "external_url_required": "External Home Assistant URL is required Settings > System > Network",
       "webhook_public_key_required": "Webhook public key is required when webhook refresh is enabled",
       "permissions_not_ok": "Token validation failed for one or more selected features. See validation details below.",
       "unknown": "Unexpected error"
@@ -81,17 +84,17 @@
         "title": "Update Starling entities",
         "description": "Choose which balances and Spaces should stay enabled, which Space categories to include, and how much history to keep.",
         "data": {
-          "include_cleared_balance": "Create cleared balance sensor",
-          "include_effective_balance": "Create effective balance sensor",
-          "space_names": "Spaces",
           "use_webhook": "Enable webhook-triggered refresh",
           "webhook_public_key": "Webhook public key (PEM)",
-          "upcoming_limit": "Number of upcoming scheduled payments to keep",
-          "history_limit": "Number of recent transfers to keep",
+          "include_cleared_balance": "Create cleared balance sensor",
+          "include_effective_balance": "Create effective balance sensor",
           "include_savings_spaces": "Include Savings Spaces",
           "include_spending_spaces": "Include Spending Spaces",
           "include_kite_spaces": "Include Kite Spaces",
-          "show_savings_account_spaces": "Create separate Space sensors for this savings account"
+          "show_savings_account_spaces": "Create separate Space sensors for this savings account",
+          "space_names": "Spaces",
+          "upcoming_limit": "Number of upcoming scheduled payments to keep",
+          "history_limit": "Number of recent transfers to keep"
         }
       }
     }
