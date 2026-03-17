@@ -9,11 +9,14 @@ import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.core import callback
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers.network import NoURLAvailableError, get_url
 from homeassistant.helpers.selector import (
     BooleanSelector,
     NumberSelector,
     NumberSelectorConfig,
     NumberSelectorMode,
+    TextSelector,
+    TextSelectorConfig,
     SelectSelector,
     SelectSelectorConfig,
     SelectSelectorMode,
@@ -35,6 +38,7 @@ from .const import (
     CONF_SPACE_NAMES,
     CONF_UPCOMING_LIMIT,
     CONF_USE_WEBHOOK,
+    CONF_WEBHOOK_PUBLIC_KEY,
     DEFAULT_USE_WEBHOOK,
     DEFAULT_HISTORY_LIMIT,
     DEFAULT_INCLUDE_KITE_SPACES,
@@ -375,6 +379,7 @@ class StarlingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             errors=errors,
         )
 
+
     async def async_step_token(self, user_input: dict[str, Any] | None = None):
         errors: dict[str, str] = {}
         if user_input is not None:
@@ -417,6 +422,56 @@ class StarlingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 "validation_details": self._validation_details or "No validation errors yet.",
             },
         )
+    
+    
+    async def async_step_webhook(self, user_input: dict[str, Any] | None = None):
+        errors: dict[str, str] = {}
+
+        if not self._pending_entry_data:
+            return self.async_abort(reason="unknown")
+
+        webhook_url_preview = None
+
+        try:
+            base_url = get_url(
+                self.hass,
+                allow_internal=False,
+                allow_external=True,
+                allow_cloud=True,
+            )
+            webhook_url_preview = f"{base_url}/api/webhook/<generated-after-save>"
+        except NoURLAvailableError:
+            errors["base"] = "external_url_required"
+
+        if user_input is not None and not errors:
+            webhook_public_key = user_input.get(CONF_WEBHOOK_PUBLIC_KEY, "").strip()
+
+            if not webhook_public_key:
+                errors["base"] = "webhook_public_key_required"
+            else:
+                return self.async_create_entry(
+                    title=self._account_name,
+                    data={
+                        **self._pending_entry_data,
+                        CONF_WEBHOOK_PUBLIC_KEY: webhook_public_key,
+                    },
+                )
+
+        return self.async_show_form(
+            step_id="webhook",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(CONF_WEBHOOK_PUBLIC_KEY): TextSelector(
+                        TextSelectorConfig(multiline=True, type="text")
+                    ),
+                }
+            ),
+            errors=errors,
+            description_placeholders={
+                "webhook_url": webhook_url_preview or "Unavailable",
+            },
+        )
+
 
     async def async_step_account(self, user_input: dict[str, Any] | None = None):
         errors: dict[str, str] = {}
@@ -460,11 +515,25 @@ class StarlingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         is_savings_account = self._account_type == "SAVINGS"
 
         if user_input is not None:
+            use_webhook = user_input.get(CONF_USE_WEBHOOK, DEFAULT_USE_WEBHOOK)
+            webhook_public_key = user_input.get(CONF_WEBHOOK_PUBLIC_KEY, "").strip()
+
             include_cleared = user_input.get(CONF_INCLUDE_CLEARED, include_main)
             include_effective = user_input.get(CONF_INCLUDE_EFFECTIVE, include_main)
-            include_savings_spaces = user_input.get(CONF_INCLUDE_SAVINGS_SPACES, DEFAULT_INCLUDE_SAVINGS_SPACES)
-            include_spending_spaces = False if is_savings_account else user_input.get(CONF_INCLUDE_SPENDING_SPACES, DEFAULT_INCLUDE_SPENDING_SPACES)
-            include_kite_spaces = False if is_savings_account else user_input.get(CONF_INCLUDE_KITE_SPACES, DEFAULT_INCLUDE_KITE_SPACES)
+            include_savings_spaces = user_input.get(
+                CONF_INCLUDE_SAVINGS_SPACES,
+                DEFAULT_INCLUDE_SAVINGS_SPACES,
+            )
+            include_spending_spaces = (
+                False
+                if is_savings_account
+                else user_input.get(CONF_INCLUDE_SPENDING_SPACES, DEFAULT_INCLUDE_SPENDING_SPACES)
+            )
+            include_kite_spaces = (
+                False
+                if is_savings_account
+                else user_input.get(CONF_INCLUDE_KITE_SPACES, DEFAULT_INCLUDE_KITE_SPACES)
+            )
 
             filtered_space_names = self._filtered_space_names(
                 include_savings=include_savings_spaces,
@@ -476,10 +545,19 @@ class StarlingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 filtered_space_names,
                 user_input.get(CONF_SHOW_SAVINGS_ACCOUNT_SPACES),
             )
-            show_savings_account_spaces = default_show_savings_spaces if offer_savings_checkbox else self._account_type != "SAVINGS"
+            show_savings_account_spaces = (
+                default_show_savings_spaces
+                if offer_savings_checkbox
+                else self._account_type != "SAVINGS"
+            )
 
             allowed_space_names = set(filtered_space_names)
-            selected_spaces = [name for name in user_input.get(CONF_SPACE_NAMES, []) if name in allowed_space_names] if include_spaces else []
+            selected_spaces = (
+                [name for name in user_input.get(CONF_SPACE_NAMES, []) if name in allowed_space_names]
+                if include_spaces
+                else []
+            )
+
             if self._account_type == "SAVINGS" and not show_savings_account_spaces:
                 selected_spaces = []
 
@@ -493,39 +571,54 @@ class StarlingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 has_any_entity = True
             if include_spaces and selected_spaces:
                 has_any_entity = True
-            if include_transfers and any(self._space_catalog.get(name, {}).get("supports_transfers") for name in selected_spaces):
+            if include_transfers and any(
+                self._space_catalog.get(name, {}).get("supports_transfers") for name in selected_spaces
+            ):
                 has_any_entity = True
 
             if not has_any_entity:
                 errors["base"] = "no_entities_selected"
             else:
+                self._use_webhook = use_webhook
+                self._pending_entry_data = {
+                    CONF_ACCESS_TOKEN: self._token,
+                    CONF_SANDBOX: self._sandbox,
+                    CONF_ACCOUNT_UID: self._account_uid,
+                    CONF_FEATURES: self._features,
+                    CONF_INCLUDE_CLEARED: include_cleared,
+                    CONF_INCLUDE_EFFECTIVE: include_effective,
+                    CONF_INCLUDE_SAVINGS_SPACES: include_savings_spaces,
+                    CONF_INCLUDE_SPENDING_SPACES: include_spending_spaces,
+                    CONF_INCLUDE_KITE_SPACES: include_kite_spaces,
+                    CONF_SHOW_SAVINGS_ACCOUNT_SPACES: show_savings_account_spaces,
+                    CONF_SPACE_NAMES: selected_spaces,
+                    CONF_HISTORY_LIMIT: history_limit,
+                    CONF_UPCOMING_LIMIT: upcoming_limit,
+                    CONF_USE_WEBHOOK: use_webhook,
+                }
+
+                if use_webhook:
+                    return await self.async_step_webhook()
+
                 return self.async_create_entry(
                     title=self._account_name,
-                    data={
-                        CONF_ACCESS_TOKEN: self._token,
-                        CONF_SANDBOX: self._sandbox,
-                        CONF_ACCOUNT_UID: self._account_uid,
-                        CONF_FEATURES: self._features,
-                        CONF_INCLUDE_CLEARED: include_cleared,
-                        CONF_INCLUDE_EFFECTIVE: include_effective,
-                        CONF_INCLUDE_SAVINGS_SPACES: include_savings_spaces,
-                        CONF_INCLUDE_SPENDING_SPACES: include_spending_spaces,
-                        CONF_INCLUDE_KITE_SPACES: include_kite_spaces,
-                        CONF_SHOW_SAVINGS_ACCOUNT_SPACES: show_savings_account_spaces,
-                        CONF_SPACE_NAMES: selected_spaces,
-                        CONF_HISTORY_LIMIT: history_limit,
-                        CONF_UPCOMING_LIMIT: upcoming_limit,
-                    },
+                    data=self._pending_entry_data,
                 )
 
         include_savings_spaces = DEFAULT_INCLUDE_SAVINGS_SPACES
-        include_spending_spaces = False if is_savings_account else DEFAULT_INCLUDE_SPENDING_SPACES
-        include_kite_spaces = False if is_savings_account else DEFAULT_INCLUDE_KITE_SPACES
+        include_spending_spaces = (
+            False if is_savings_account else DEFAULT_INCLUDE_SPENDING_SPACES
+        )
+        include_kite_spaces = (
+            False if is_savings_account else DEFAULT_INCLUDE_KITE_SPACES
+        )
+
         default_space_names = self._filtered_space_names(
             include_savings=include_savings_spaces,
             include_spending=include_spending_spaces,
             include_kite=include_kite_spaces,
         )
+
         offer_savings_checkbox, default_show_savings_spaces = _allow_savings_account_space_entities(
             self._account_type,
             default_space_names,
@@ -533,30 +626,67 @@ class StarlingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         )
 
         schema_fields: dict[Any, Any] = {}
+
+        schema_fields[
+            vol.Optional(CONF_USE_WEBHOOK, default=DEFAULT_USE_WEBHOOK)
+        ] = BooleanSelector()
+
         if include_main:
             schema_fields[vol.Optional(CONF_INCLUDE_CLEARED, default=True)] = BooleanSelector()
             schema_fields[vol.Optional(CONF_INCLUDE_EFFECTIVE, default=True)] = BooleanSelector()
+
         if include_spaces:
-            schema_fields[vol.Optional(CONF_INCLUDE_SAVINGS_SPACES, default=include_savings_spaces)] = BooleanSelector()
+            schema_fields[
+                vol.Optional(CONF_INCLUDE_SAVINGS_SPACES, default=include_savings_spaces)
+            ] = BooleanSelector()
+
             if not is_savings_account:
-                schema_fields[vol.Optional(CONF_INCLUDE_SPENDING_SPACES, default=include_spending_spaces)] = BooleanSelector()
-                schema_fields[vol.Optional(CONF_INCLUDE_KITE_SPACES, default=include_kite_spaces)] = BooleanSelector()
+                schema_fields[
+                    vol.Optional(CONF_INCLUDE_SPENDING_SPACES, default=include_spending_spaces)
+                ] = BooleanSelector()
+                schema_fields[
+                    vol.Optional(CONF_INCLUDE_KITE_SPACES, default=include_kite_spaces)
+                ] = BooleanSelector()
+
             if offer_savings_checkbox:
-                schema_fields[vol.Optional(CONF_SHOW_SAVINGS_ACCOUNT_SPACES, default=default_show_savings_spaces)] = BooleanSelector()
+                schema_fields[
+                    vol.Optional(
+                        CONF_SHOW_SAVINGS_ACCOUNT_SPACES,
+                        default=default_show_savings_spaces,
+                    )
+                ] = BooleanSelector()
+
             if not is_savings_account or offer_savings_checkbox:
-                schema_fields[vol.Optional(CONF_SPACE_NAMES, default=default_space_names if (not is_savings_account or default_show_savings_spaces) else [])] = _space_selector(
+                schema_fields[
+                    vol.Optional(
+                        CONF_SPACE_NAMES,
+                        default=default_space_names
+                        if (not is_savings_account or default_show_savings_spaces)
+                        else [],
+                    )
+                ] = _space_selector(
                     self._space_options(
                         include_savings=include_savings_spaces,
                         include_spending=include_spending_spaces,
                         include_kite=include_kite_spaces,
                     )
                 )
-        if include_scheduled:
-            schema_fields[vol.Optional(CONF_UPCOMING_LIMIT, default=DEFAULT_UPCOMING_LIMIT)] = _int_selector()
-        if include_transfers:
-            schema_fields[vol.Optional(CONF_HISTORY_LIMIT, default=DEFAULT_HISTORY_LIMIT)] = _int_selector()
 
-        return self.async_show_form(step_id="select_entities", data_schema=vol.Schema(schema_fields), errors=errors)
+        if include_scheduled:
+            schema_fields[
+                vol.Optional(CONF_UPCOMING_LIMIT, default=DEFAULT_UPCOMING_LIMIT)
+            ] = _int_selector()
+
+        if include_transfers:
+            schema_fields[
+                vol.Optional(CONF_HISTORY_LIMIT, default=DEFAULT_HISTORY_LIMIT)
+            ] = _int_selector()
+
+        return self.async_show_form(
+            step_id="select_entities",
+            data_schema=vol.Schema(schema_fields),
+            errors=errors,
+        )
 
     async def async_step_reconfigure(self, user_input: dict[str, Any] | None = None):
         entry = self._get_reconfigure_entry()
@@ -618,6 +748,8 @@ class StarlingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
 class StarlingOptionsFlow(config_entries.OptionsFlow):
     def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
+        self._pending_entry_data: dict[str, Any] | None = None
+        self._use_webhook = False
         self._entry = config_entry
         self._account_type: str | None = None
         self._space_catalog: dict[str, dict[str, Any]] = {}
@@ -723,19 +855,56 @@ class StarlingOptionsFlow(config_entries.OptionsFlow):
                     self._entry.data.get(CONF_USE_WEBHOOK, DEFAULT_USE_WEBHOOK),
                 ),
             )
-            include_cleared = user_input.get(CONF_INCLUDE_CLEARED, include_main)
-            include_effective = user_input.get(CONF_INCLUDE_EFFECTIVE, include_main)
+            webhook_public_key = user_input.get(
+                CONF_WEBHOOK_PUBLIC_KEY,
+                self._entry.options.get(
+                    CONF_WEBHOOK_PUBLIC_KEY,
+                    self._entry.data.get(CONF_WEBHOOK_PUBLIC_KEY, ""),
+                ),
+            ).strip()
+
+            include_cleared = user_input.get(
+                CONF_INCLUDE_CLEARED,
+                self._entry.options.get(
+                    CONF_INCLUDE_CLEARED,
+                    self._entry.data.get(CONF_INCLUDE_CLEARED, True),
+                ),
+            )
+            include_effective = user_input.get(
+                CONF_INCLUDE_EFFECTIVE,
+                self._entry.options.get(
+                    CONF_INCLUDE_EFFECTIVE,
+                    self._entry.data.get(CONF_INCLUDE_EFFECTIVE, True),
+                ),
+            )
             include_savings_spaces = user_input.get(
                 CONF_INCLUDE_SAVINGS_SPACES,
-                self._entry.options.get(CONF_INCLUDE_SAVINGS_SPACES, self._entry.data.get(CONF_INCLUDE_SAVINGS_SPACES, DEFAULT_INCLUDE_SAVINGS_SPACES)),
+                self._entry.options.get(
+                    CONF_INCLUDE_SAVINGS_SPACES,
+                    self._entry.data.get(CONF_INCLUDE_SAVINGS_SPACES, DEFAULT_INCLUDE_SAVINGS_SPACES),
+                ),
             )
-            include_spending_spaces = False if is_savings_account else user_input.get(
-                CONF_INCLUDE_SPENDING_SPACES,
-                self._entry.options.get(CONF_INCLUDE_SPENDING_SPACES, self._entry.data.get(CONF_INCLUDE_SPENDING_SPACES, DEFAULT_INCLUDE_SPENDING_SPACES)),
+            include_spending_spaces = (
+                False
+                if is_savings_account
+                else user_input.get(
+                    CONF_INCLUDE_SPENDING_SPACES,
+                    self._entry.options.get(
+                        CONF_INCLUDE_SPENDING_SPACES,
+                        self._entry.data.get(CONF_INCLUDE_SPENDING_SPACES, DEFAULT_INCLUDE_SPENDING_SPACES),
+                    ),
+                )
             )
-            include_kite_spaces = False if is_savings_account else user_input.get(
-                CONF_INCLUDE_KITE_SPACES,
-                self._entry.options.get(CONF_INCLUDE_KITE_SPACES, self._entry.data.get(CONF_INCLUDE_KITE_SPACES, DEFAULT_INCLUDE_KITE_SPACES)),
+            include_kite_spaces = (
+                False
+                if is_savings_account
+                else user_input.get(
+                    CONF_INCLUDE_KITE_SPACES,
+                    self._entry.options.get(
+                        CONF_INCLUDE_KITE_SPACES,
+                        self._entry.data.get(CONF_INCLUDE_KITE_SPACES, DEFAULT_INCLUDE_KITE_SPACES),
+                    ),
+                )
             )
 
             filtered_space_names = self._filtered_space_names(
@@ -743,19 +912,56 @@ class StarlingOptionsFlow(config_entries.OptionsFlow):
                 include_spending=include_spending_spaces,
                 include_kite=include_kite_spaces,
             )
+
             offer_savings_checkbox, default_show_savings_spaces = _allow_savings_account_space_entities(
                 self._account_type,
                 filtered_space_names,
-                user_input.get(CONF_SHOW_SAVINGS_ACCOUNT_SPACES, self._entry.options.get(CONF_SHOW_SAVINGS_ACCOUNT_SPACES, self._entry.data.get(CONF_SHOW_SAVINGS_ACCOUNT_SPACES, DEFAULT_SHOW_SAVINGS_ACCOUNT_SPACES))),
+                user_input.get(
+                    CONF_SHOW_SAVINGS_ACCOUNT_SPACES,
+                    self._entry.options.get(
+                        CONF_SHOW_SAVINGS_ACCOUNT_SPACES,
+                        self._entry.data.get(
+                            CONF_SHOW_SAVINGS_ACCOUNT_SPACES,
+                            DEFAULT_SHOW_SAVINGS_ACCOUNT_SPACES,
+                        ),
+                    ),
+                ),
             )
-            show_savings_account_spaces = default_show_savings_spaces if offer_savings_checkbox else self._account_type != "SAVINGS"
+
+            show_savings_account_spaces = (
+                default_show_savings_spaces
+                if offer_savings_checkbox
+                else self._account_type != "SAVINGS"
+            )
 
             allowed_space_names = set(filtered_space_names)
-            selected_spaces = [name for name in user_input.get(CONF_SPACE_NAMES, []) if name in allowed_space_names] if include_spaces else []
+            selected_spaces = (
+                [name for name in user_input.get(CONF_SPACE_NAMES, []) if name in allowed_space_names]
+                if include_spaces
+                else []
+            )
+
             if self._account_type == "SAVINGS" and not show_savings_account_spaces:
                 selected_spaces = []
-            history_limit = int(user_input.get(CONF_HISTORY_LIMIT, self._entry.options.get(CONF_HISTORY_LIMIT, self._entry.data.get(CONF_HISTORY_LIMIT, DEFAULT_HISTORY_LIMIT))))
-            upcoming_limit = int(user_input.get(CONF_UPCOMING_LIMIT, self._entry.options.get(CONF_UPCOMING_LIMIT, self._entry.data.get(CONF_UPCOMING_LIMIT, DEFAULT_UPCOMING_LIMIT))))
+
+            history_limit = int(
+                user_input.get(
+                    CONF_HISTORY_LIMIT,
+                    self._entry.options.get(
+                        CONF_HISTORY_LIMIT,
+                        self._entry.data.get(CONF_HISTORY_LIMIT, DEFAULT_HISTORY_LIMIT),
+                    ),
+                )
+            )
+            upcoming_limit = int(
+                user_input.get(
+                    CONF_UPCOMING_LIMIT,
+                    self._entry.options.get(
+                        CONF_UPCOMING_LIMIT,
+                        self._entry.data.get(CONF_UPCOMING_LIMIT, DEFAULT_UPCOMING_LIMIT),
+                    ),
+                )
+            )
 
             has_any_entity = False
             if include_main and (include_cleared or include_effective):
@@ -764,47 +970,84 @@ class StarlingOptionsFlow(config_entries.OptionsFlow):
                 has_any_entity = True
             if include_spaces and selected_spaces:
                 has_any_entity = True
-            if include_transfers and any(self._space_catalog.get(name, {}).get("supports_transfers") for name in selected_spaces):
+            if include_transfers and any(
+                self._space_catalog.get(name, {}).get("supports_transfers") for name in selected_spaces
+            ):
                 has_any_entity = True
 
             if not has_any_entity:
                 errors["base"] = "no_entities_selected"
+            elif use_webhook and not webhook_public_key:
+                errors["base"] = "webhook_public_key_required"
             else:
-                return self.async_create_entry(data={
-                    CONF_INCLUDE_CLEARED: include_cleared,
-                    CONF_INCLUDE_EFFECTIVE: include_effective,
-                    CONF_INCLUDE_SAVINGS_SPACES: include_savings_spaces,
-                    CONF_INCLUDE_SPENDING_SPACES: include_spending_spaces,
-                    CONF_INCLUDE_KITE_SPACES: include_kite_spaces,
-                    CONF_SHOW_SAVINGS_ACCOUNT_SPACES: show_savings_account_spaces,
-                    CONF_SPACE_NAMES: selected_spaces,
-                    CONF_HISTORY_LIMIT: history_limit,
-                    CONF_UPCOMING_LIMIT: upcoming_limit,
-                    CONF_USE_WEBHOOK: use_webhook,
-                })
+                return self.async_create_entry(
+                    data={
+                        CONF_INCLUDE_CLEARED: include_cleared,
+                        CONF_INCLUDE_EFFECTIVE: include_effective,
+                        CONF_INCLUDE_SAVINGS_SPACES: include_savings_spaces,
+                        CONF_INCLUDE_SPENDING_SPACES: include_spending_spaces,
+                        CONF_INCLUDE_KITE_SPACES: include_kite_spaces,
+                        CONF_SHOW_SAVINGS_ACCOUNT_SPACES: show_savings_account_spaces,
+                        CONF_SPACE_NAMES: selected_spaces,
+                        CONF_HISTORY_LIMIT: history_limit,
+                        CONF_UPCOMING_LIMIT: upcoming_limit,
+                        CONF_USE_WEBHOOK: use_webhook,
+                        CONF_WEBHOOK_PUBLIC_KEY: webhook_public_key,
+                    }
+                )
 
-        include_savings_spaces = self._entry.options.get(CONF_INCLUDE_SAVINGS_SPACES, self._entry.data.get(CONF_INCLUDE_SAVINGS_SPACES, DEFAULT_INCLUDE_SAVINGS_SPACES))
-        include_spending_spaces = False if is_savings_account else self._entry.options.get(CONF_INCLUDE_SPENDING_SPACES, self._entry.data.get(CONF_INCLUDE_SPENDING_SPACES, DEFAULT_INCLUDE_SPENDING_SPACES))
-        include_kite_spaces = False if is_savings_account else self._entry.options.get(CONF_INCLUDE_KITE_SPACES, self._entry.data.get(CONF_INCLUDE_KITE_SPACES, DEFAULT_INCLUDE_KITE_SPACES))
+        include_savings_spaces = self._entry.options.get(
+            CONF_INCLUDE_SAVINGS_SPACES,
+            self._entry.data.get(CONF_INCLUDE_SAVINGS_SPACES, DEFAULT_INCLUDE_SAVINGS_SPACES),
+        )
+        include_spending_spaces = (
+            False
+            if is_savings_account
+            else self._entry.options.get(
+                CONF_INCLUDE_SPENDING_SPACES,
+                self._entry.data.get(CONF_INCLUDE_SPENDING_SPACES, DEFAULT_INCLUDE_SPENDING_SPACES),
+            )
+        )
+        include_kite_spaces = (
+            False
+            if is_savings_account
+            else self._entry.options.get(
+                CONF_INCLUDE_KITE_SPACES,
+                self._entry.data.get(CONF_INCLUDE_KITE_SPACES, DEFAULT_INCLUDE_KITE_SPACES),
+            )
+        )
+
         filtered_default_space_names = self._filtered_space_names(
             include_savings=include_savings_spaces,
             include_spending=include_spending_spaces,
             include_kite=include_kite_spaces,
         )
+
         offer_savings_checkbox, default_show_savings_spaces = _allow_savings_account_space_entities(
             self._account_type,
             filtered_default_space_names,
-            self._entry.options.get(CONF_SHOW_SAVINGS_ACCOUNT_SPACES, self._entry.data.get(CONF_SHOW_SAVINGS_ACCOUNT_SPACES, DEFAULT_SHOW_SAVINGS_ACCOUNT_SPACES)),
+            self._entry.options.get(
+                CONF_SHOW_SAVINGS_ACCOUNT_SPACES,
+                self._entry.data.get(
+                    CONF_SHOW_SAVINGS_ACCOUNT_SPACES,
+                    DEFAULT_SHOW_SAVINGS_ACCOUNT_SPACES,
+                ),
+            ),
         )
+
         default_space_names = [
             name
-            for name in self._entry.options.get(CONF_SPACE_NAMES, self._entry.data.get(CONF_SPACE_NAMES, []))
+            for name in self._entry.options.get(
+                CONF_SPACE_NAMES,
+                self._entry.data.get(CONF_SPACE_NAMES, []),
+            )
             if name in self._filtered_space_names(
                 include_savings=include_savings_spaces,
                 include_spending=include_spending_spaces,
                 include_kite=include_kite_spaces,
             )
         ]
+
         if is_savings_account and not default_show_savings_spaces:
             default_space_names = []
 
@@ -819,6 +1062,16 @@ class StarlingOptionsFlow(config_entries.OptionsFlow):
                 ),
             )
         ] = BooleanSelector()
+
+        schema_fields[
+            vol.Optional(
+                CONF_WEBHOOK_PUBLIC_KEY,
+                default=self._entry.options.get(
+                    CONF_WEBHOOK_PUBLIC_KEY,
+                    self._entry.data.get(CONF_WEBHOOK_PUBLIC_KEY, ""),
+                ),
+            )
+        ] = TextSelector(TextSelectorConfig(multiline=True, type="text"))
 
         if include_main:
             schema_fields[
@@ -839,24 +1092,68 @@ class StarlingOptionsFlow(config_entries.OptionsFlow):
                     ),
                 )
             ] = BooleanSelector()
+
         if include_spaces:
-            schema_fields[vol.Optional(CONF_INCLUDE_SAVINGS_SPACES, default=include_savings_spaces)] = BooleanSelector()
+            schema_fields[
+                vol.Optional(CONF_INCLUDE_SAVINGS_SPACES, default=include_savings_spaces)
+            ] = BooleanSelector()
+
             if not is_savings_account:
-                schema_fields[vol.Optional(CONF_INCLUDE_SPENDING_SPACES, default=include_spending_spaces)] = BooleanSelector()
-                schema_fields[vol.Optional(CONF_INCLUDE_KITE_SPACES, default=include_kite_spaces)] = BooleanSelector()
+                schema_fields[
+                    vol.Optional(CONF_INCLUDE_SPENDING_SPACES, default=include_spending_spaces)
+                ] = BooleanSelector()
+                schema_fields[
+                    vol.Optional(CONF_INCLUDE_KITE_SPACES, default=include_kite_spaces)
+                ] = BooleanSelector()
+
             if offer_savings_checkbox:
-                schema_fields[vol.Optional(CONF_SHOW_SAVINGS_ACCOUNT_SPACES, default=default_show_savings_spaces)] = BooleanSelector()
+                schema_fields[
+                    vol.Optional(
+                        CONF_SHOW_SAVINGS_ACCOUNT_SPACES,
+                        default=default_show_savings_spaces,
+                    )
+                ] = BooleanSelector()
+
             if not is_savings_account or offer_savings_checkbox:
-                schema_fields[vol.Optional(CONF_SPACE_NAMES, default=default_space_names if (not is_savings_account or default_show_savings_spaces) else [])] = _space_selector(
+                schema_fields[
+                    vol.Optional(
+                        CONF_SPACE_NAMES,
+                        default=default_space_names
+                        if (not is_savings_account or default_show_savings_spaces)
+                        else [],
+                    )
+                ] = _space_selector(
                     self._space_options(
                         include_savings=include_savings_spaces,
                         include_spending=include_spending_spaces,
                         include_kite=include_kite_spaces,
                     )
                 )
-        if include_scheduled:
-            schema_fields[vol.Optional(CONF_UPCOMING_LIMIT, default=self._entry.options.get(CONF_UPCOMING_LIMIT, self._entry.data.get(CONF_UPCOMING_LIMIT, DEFAULT_UPCOMING_LIMIT)))] = _int_selector()
-        if include_transfers:
-            schema_fields[vol.Optional(CONF_HISTORY_LIMIT, default=self._entry.options.get(CONF_HISTORY_LIMIT, self._entry.data.get(CONF_HISTORY_LIMIT, DEFAULT_HISTORY_LIMIT)))] = _int_selector()
 
-        return self.async_show_form(step_id="init", data_schema=vol.Schema(schema_fields), errors=errors)
+        if include_scheduled:
+            schema_fields[
+                vol.Optional(
+                    CONF_UPCOMING_LIMIT,
+                    default=self._entry.options.get(
+                        CONF_UPCOMING_LIMIT,
+                        self._entry.data.get(CONF_UPCOMING_LIMIT, DEFAULT_UPCOMING_LIMIT),
+                    ),
+                )
+            ] = _int_selector()
+
+        if include_transfers:
+            schema_fields[
+                vol.Optional(
+                    CONF_HISTORY_LIMIT,
+                    default=self._entry.options.get(
+                        CONF_HISTORY_LIMIT,
+                        self._entry.data.get(CONF_HISTORY_LIMIT, DEFAULT_HISTORY_LIMIT),
+                    ),
+                )
+            ] = _int_selector()
+
+        return self.async_show_form(
+            step_id="init",
+            data_schema=vol.Schema(schema_fields),
+            errors=errors,
+        )

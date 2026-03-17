@@ -48,6 +48,11 @@
           "sandbox": "Use Starling sandbox"
         }
       },
+      "external_url_required": "External Home Assistant URL required for webhook",
+      "webhook": {
+        "title": "Configure webhook",
+        "description": "1. Copy this webhook URL into Starling Developer Portal: {webhook_url}\n2. Copy the webhook public key from Starling\n3. Paste the public key below"
+      },
       "account": {
         "title": "Choose account",
         "description": "Choose which Starling account should be used for this entry. Validation details: {validation_details}",
@@ -60,6 +65,7 @@
       "cannot_connect": "Could not connect to the Starling API",
       "no_features_selected": "Select at least one feature",
       "no_entities_selected": "Select at least one balance or Space",
+      "webhook_public_key_required": "Webhook public key is required when webhook refresh is enabled",
       "permissions_not_ok": "Token validation failed for one or more selected features. See validation details below.",
       "unknown": "Unexpected error"
     },
@@ -79,6 +85,7 @@
           "include_effective_balance": "Create effective balance sensor",
           "space_names": "Spaces",
           "use_webhook": "Enable webhook-triggered refresh",
+          "webhook_public_key": "Webhook public key (PEM)",
           "upcoming_limit": "Number of upcoming scheduled payments to keep",
           "history_limit": "Number of recent transfers to keep",
           "include_savings_spaces": "Include Savings Spaces",

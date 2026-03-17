@@ -40,6 +40,11 @@
           "sandbox": "Użyj sandboxa Starling"
         }
       },
+      "external_url_required": "Webhook wymaga skonfigurowanego external URL Home Assistant",
+      "webhook": {
+        "title": "Skonfiguruj webhook",
+        "description": "1. Skopiuj ten webhook URL do Starling Developer Portal: {webhook_url}\n2. Skopiuj klucz publiczny webhooka ze Starling\n3. Wklej klucz poniżej"
+      },
       "account": {
         "title": "Wybierz konto",
         "description": "Wybierz konto Starling używane przez ten wpis integracji. Szczegóły walidacji: {validation_details}",
@@ -60,6 +65,7 @@
       "cannot_connect": "Nie udało się połączyć z API Starling",
       "no_features_selected": "Wybierz co najmniej jedną funkcję",
       "no_entities_selected": "Wybierz co najmniej jedno saldo lub Space",
+      "webhook_public_key_required": "Klucz publiczny webhooka jest wymagany, gdy włączone jest odświeżanie webhookiem",
       "permissions_not_ok": "Walidacja tokena nie przeszła dla jednej lub większej liczby wybranych funkcji. Zobacz szczegóły walidacji powyżej.",
       "unknown": "Nieoczekiwany błąd"
     },
@@ -80,6 +86,7 @@
           "space_names": "Spaces",
           "upcoming_limit": "Ile nadchodzących zaplanowanych płatności przechowywać",
           "history_limit": "Ile ostatnich transferów przechowywać",
+          "webhook_public_key": "Klucz publiczny webhooka (PEM)",
           "use_webhook": "Włącz odświeżanie wyzwalane webhookiem",
           "include_savings_spaces": "Uwzględnij Savings Spaces",
           "include_spending_spaces": "Uwzględnij Spending Spaces",

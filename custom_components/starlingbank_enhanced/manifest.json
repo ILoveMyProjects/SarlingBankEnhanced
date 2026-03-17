@@ -12,6 +12,8 @@
   "loggers": [
     "custom_components.starlingbank_enhanced"
   ],
-  "requirements": [],
+  "requirements": [
+    "cryptography>=42.0.0"
+  ],
   "version": "1.0.1"
 }

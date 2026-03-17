@@ -23,8 +23,16 @@ CONF_WEBHOOK_ID = "webhook_id"
 CONF_WEBHOOK_URL = "webhook_url"
 CONF_WEBHOOK_LAST_RECEIVED = "webhook_last_received"
 CONF_WEBHOOK_SECRET = "webhook_secret"
+CONF_WEBHOOK_PUBLIC_KEY = "webhook_public_key"
+CONF_WEBHOOK_LAST_EVENT_TYPE = "webhook_last_event_type"
+CONF_WEBHOOK_LAST_NONCE = "webhook_last_nonce"
+CONF_WEBHOOK_LAST_ROUTE = "webhook_last_route"
 
 WEBHOOK_DEBOUNCE_SECONDS = 5
+WEBHOOK_REPLAY_WINDOW_SECONDS = 600
+WEBHOOK_MAX_EVENT_AGE_SECONDS = 900
+WEBHOOK_SIGNATURE_HEADER = "X-Hook-Signature"
+WEBHOOK_NONCE_CACHE_KEY = "seen_webhook_nonces"
 
 DEFAULT_USE_WEBHOOK = False
 DEFAULT_NAME = "Starling"
